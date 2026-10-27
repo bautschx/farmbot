@@ -120,10 +120,12 @@ def laufen(daten, konfig, zustand):
         elif not p.get("auszahlung_sicher", True):
             grund = "Auszahlung kann einbehalten werden"
         else:
-            schwach = (pos["apr_jetzt"] or 0) < regeln["min_apr_prozent"]  # APR im Bereich DIESER Position
+            # Ausstieg erst unter ausstieg_apr_prozent (Regel 4: 200 %), Einstieg verlangt min_apr_prozent (500 %)
+            grenze = regeln.get("ausstieg_apr_prozent", regeln["min_apr_prozent"])
+            schwach = (pos["apr_jetzt"] or 0) < grenze  # APR im Bereich DIESER Position
             pos["apr_schwach"] = pos.get("apr_schwach", 0) + 1 if schwach else 0
             if pos["apr_schwach"] >= 2:
-                grund = f"APR unter {regeln['min_apr_prozent']} % (2 Läufe)"
+                grund = f"APR unter {grenze} % (2 Läufe)"
         if grund:
             _schliessen(pos, f, jetzt, grund, offen, buch, sperre, e)
             t = buch[-1]

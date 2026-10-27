@@ -605,15 +605,20 @@ def bereich_waehlen(pos, schwankung, regeln):
     """Bereich je Farm statt fest ±2 % (Stefans Vorgabe 27.10.2026):
     - Mindestbreite aus der Bewegung des Paares: ± (24-h-Schwankung x Faktor), nie unter dem Minimum.
       Ruhige Paare (z. B. ETH/USDC) bleiben eng, volatile bekommen mehr Platz.
-    - Reicht der APR, wird breiter gewaehlt: der breiteste Bereich, der noch das APR-Ziel schafft
-      (weniger Nachziehen, weniger Risiko). Schafft keiner das Ziel, der engste erlaubte.
+    - Ist der APR im engsten erlaubten Bereich sehr hoch (ab sehr_hoch_apr_prozent, 2.000 %),
+      bleibt er eng und nimmt den vollen Ertrag (Stefans Vorgabe 27.10.2026).
+    - Sonst der breiteste Bereich, der noch das APR-Ziel (1.000 %) schafft: weniger Nachziehen,
+      weniger Risiko. Schafft keiner das Ziel, der engste erlaubte (Mindest-APR prueft apr_ok).
     Rueckgabe (gewaehlter Bereich in Prozent oder None, Mindestbreite)."""
     mindest = max(regeln["min_bereich_prozent"], (schwankung or 0) * regeln["bereich_faktor_schwankung"])
     erlaubt = sorted(float(b) for b, v in pos.items() if v and float(b) >= mindest - 1e-9)
     if not erlaubt:
         return None, mindest
+    eng = erlaubt[0]
+    if pos[_k(eng)]["apr"] >= regeln["sehr_hoch_apr_prozent"]:
+        return _n(eng), mindest
     ziel = [b for b in erlaubt if pos[_k(b)]["apr"] >= regeln["ziel_apr_prozent"]]
-    return _n(max(ziel) if ziel else erlaubt[0]), mindest
+    return _n(max(ziel) if ziel else eng), mindest
 
 
 def _k(b):

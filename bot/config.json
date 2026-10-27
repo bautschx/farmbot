@@ -4,8 +4,10 @@
   "bereiche_prozent": [2, 3, 4, 5, 6, 8, 10, 12, 15],
   "regeln": {
     "max_poolgebuehr_prozent": 0.3,
-    "min_apr_prozent": 200,
-    "ziel_apr_prozent": 600,
+    "min_apr_prozent": 500,
+    "ziel_apr_prozent": 1000,
+    "sehr_hoch_apr_prozent": 2000,
+    "ausstieg_apr_prozent": 200,
     "min_liquiditaet_faktor_emission": 10,
     "max_tagesminus_belohnung_prozent": 30,
     "max_paar_schwankung_24h_prozent": 30,
