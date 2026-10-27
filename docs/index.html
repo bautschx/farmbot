@@ -62,7 +62,7 @@ h2{font-size:17px;margin:28px 0 10px}
   </tr></thead>
   <tbody id="zeilen"></tbody>
 </table></div>
-<p class="klein">„Dein APR“ und „Dein Ertrag/Tag“ sind für eine eigene Position mit dem eingestellten Betrag im gewählten Bereich gerechnet, aus der gemessenen Ausschüttung seit dem letzten Lauf (Belohnungszähler des Pools), der gestakten Liquidität und Preisen, die der Bot selbst aus den Pools ableitet. Sie gelten nur, solange die Position im Bereich ist. Handelsgebühren sind nicht enthalten.</p>
+<p class="klein">„Dein APR“ und „Dein Ertrag/Tag“ sind für eine eigene Position mit dem eingestellten Betrag im gewählten Bereich gerechnet, bei Aero und Up33 aus der gemessenen Ausschüttung seit dem letzten Lauf (Belohnungszähler des Pools), bei Blackhole, Pharaoh und PancakeSwap aus der Vertragsrate mit dem Median der Liquidität im Kursbereich der letzten 24 h („Median aus n“ Messungen), der gestakten Liquidität und Preisen, die der Bot selbst aus den Pools ableitet. Sie gelten nur, solange die Position im Bereich ist. Handelsgebühren sind nicht enthalten.</p>
 
 <h2>Angebundene DEXe</h2>
 <div class="tabelle"><table>
@@ -98,7 +98,7 @@ function zeichne(){
     const z24 = f.belohnung_24h_prozent;
     tr.innerHTML = `<td>${f.chain}<br><span class="klein">${f.dex}</span></td><td>${f.paar}</td>
       <td>${f.belohnung}<br><span class="klein">${f.belohnung_preis!=null?f.belohnung_preis.toPrecision(4)+" $":"Preis unbekannt"}</span></td>
-      <td class="zahl"><b>${pz(f.mein_apr[b])}</b></td><td class="zahl">${usd(f.mein_ertrag_tag_usd[b],2)}</td>
+      <td class="zahl"><b>${pz(f.mein_apr[b])}</b>${f.messpunkte?'<br><span class="klein">Median aus '+f.messpunkte+'</span>':''}</td><td class="zahl">${usd(f.mein_ertrag_tag_usd[b],2)}</td>
       <td class="zahl">${usd(f.tvl_usd)}</td><td class="zahl">${f.paar_schwankung_24h_prozent==null?"<span class='klein'>sammelt noch</span>":pz(f.paar_schwankung_24h_prozent,1)}</td><td class="zahl">${pz(f.gebuehr_prozent,2)}</td>
       <td class="zahl">${z24==null?"<span class='klein'>sammelt noch</span>":pz(z24,1)}</td>
       <td style="white-space:normal;min-width:260px">${regeln}</td><td>${link}</td>`;
