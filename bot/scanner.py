@@ -35,6 +35,8 @@ S = {  # Funktions-Selektoren (keccak256, erste 4 Bytes), am 27.10.2026 berechne
     "lmPool": "540d4918", "masterChef": "575a86b2", "lmLiquidity": "c3487ff8",
     "poolLength": "081e3eda", "poolInfo": "1526fe27", "totalAllocPoint": "17caf6f1",
     "latestPeriodCakePerSecond": "c4f6a8ce", "latestPeriodEndTime": "6d4cec78",
+    # Aero MetaDEX (seit 21.10.2026): laufende Gesamtsumme der Ausschuettung je Gauge im Voter
+    "projected": "768cb01a",
 }
 PANCAKE_PRECISION = 10 ** 12  # MasterChefV3.PRECISION(), am 27.10.2026 gelesen
 Q96 = 2 ** 96
@@ -121,6 +123,24 @@ def farmen_lesen(chain, dex, paare, cache):
     res = _m(chain, aufr)
     k = len(FELDER)
     messung = cache.setdefault("messung", {})
+    # Aero MetaDEX: Der Pool bekommt die Ausschuettung schubweise gutgeschrieben, geteilt durch die
+    # gerade gestakte Liquiditaet. Liegt dabei kurz kaum etwas im Pool, springt der Zaehler je
+    # Liquiditaet, und die Hochrechnung explodiert (27.10.2026: USDC/PDDc 1,1 Mio $/Tag gerechnet,
+    # laut Voter 423 $/Tag). Deshalb, wo vorhanden, die Gesamtsumme des Gauges im Voter
+    # (projectedCumulativeRewardShare) zwischen zwei Laeufen messen.
+    c = cache.setdefault("dex", {}).setdefault(f"{chain.name}|{dex['name']}", {})
+    if "leafvoter" not in c and paare:
+        lv = None
+        try:
+            v = als_adr(chain.call(paare[0][1], aufruf(S["voter"])))
+            if v and v != NULL and als_int(chain.call(v, aufruf(S["projected"], paare[0][1]))) is not None:
+                lv = v
+        except RPCFehler:
+            lv = None
+        c["leafvoter"] = lv
+    lv = c.get("leafvoter")
+    proj = _m(chain, [(lv, aufruf(S["projected"], g)) for _, g in paare]) if lv else [None] * len(paare)
+    jetzt_w = time.time()
     farmen = []
     for i, (p, g) in enumerate(paare):
         r = res[i * k:(i + 1) * k]
@@ -130,6 +150,23 @@ def farmen_lesen(chain, dex, paare, cache):
             continue  # anderer Vertragstyp
         schl = f"{chain.name}:{p}"
         L_jetzt = als_int(r[3]) or 0
+        pv = als_int(proj[i])
+        if pv is not None:
+            sp = f"{chain.name}:voter:{p}"
+            alt_p = messung.get(sp)
+            ges = alt_p.get("ges") if alt_p else None  # Belohnung (kleinste Einheit) je Sekunde, ganzer Pool
+            if alt_p and jetzt_w - alt_p["t"] >= 600:
+                ges = max(0, (pv - int(alt_p["v"])) / (jetzt_w - alt_p["t"]))
+            if not alt_p or jetzt_w - alt_p["t"] >= 600:
+                messung[sp] = {"v": str(pv), "t": jetzt_w, "ges": ges}
+            rate = None if ges is None else (ges / L_jetzt if L_jetzt else 0.0)
+            farmen.append({
+                "pool": p, "gauge": g, "dex": dex["name"], "belohnung": dex["belohnung"],
+                "t0": t0, "t1": t1, "sqrtP": als_int(r[2], 0), "tick": als_int(r[2], 1, signed=True),
+                "staked_L": L_jetzt, "tickSpacing": als_int(r[4], signed=True),
+                "fee": als_int(r[5]), "rate": rate, "gemessen_bis": int(jetzt_w), "vertragsrate": True,
+            })
+            continue
         alt = messung.get(schl)
         if alt and "L" not in alt:
             alt = None  # Messung aus aelterer Fassung ohne Liquiditaet: neu beginnen
@@ -477,7 +514,7 @@ def scannen(konfig, cache, verlauf):
                 # springt mit dem Kurs (Pharaoh WAVAX/USDC am 27.10.2026: Faktor 3 in 30 Minuten).
                 # Deshalb Median der letzten 24 h, bei gerader Anzahl der hoehere Wert (vorsichtig).
                 messpunkte = None
-                if dex["typ"] != "cl_wachstum" and f["staked_L"]:
+                if (dex["typ"] != "cl_wachstum" or f.get("vertragsrate")) and f["staked_L"]:
                     lk = f"{name}:L:{f['pool']}"
                     reihe = [x for x in verlauf.get(lk, []) if x[0] > jetzt - 86400] + [[jetzt, f["staked_L"]]]
                     verlauf[lk] = reihe
