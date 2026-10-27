@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.request
 
 HIER = os.path.dirname(os.path.abspath(__file__))
@@ -47,6 +48,13 @@ def telegram(text):
             ok = json.loads(r.read()).get("ok", False)
         print("Telegram:", "gesendet" if ok else "abgelehnt")
         return ok
+    except urllib.error.HTTPError as e:
+        try:
+            grund = json.loads(e.read()).get("description", "")
+        except Exception:
+            grund = ""
+        print("Telegram fehlgeschlagen:", e.code, grund)
+        return False
     except Exception as e:
         print("Telegram fehlgeschlagen:", e)
         return False
