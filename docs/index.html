@@ -62,11 +62,11 @@ h2{font-size:17px;margin:28px 0 10px}
   </tr></thead>
   <tbody id="zeilen"></tbody>
 </table></div>
-<p class="klein">„Dein APR“ und „Dein Ertrag/Tag“ sind für eine eigene Position mit dem eingestellten Betrag im gewählten Bereich gerechnet, aus den aktuellen Vertragsdaten (Ausschüttung pro Sekunde, gestakte Liquidität, Preise aus den Pools). Sie gelten nur, solange die Position im Bereich ist. Handelsgebühren sind nicht enthalten.</p>
+<p class="klein">„Dein APR“ und „Dein Ertrag/Tag“ sind für eine eigene Position mit dem eingestellten Betrag im gewählten Bereich gerechnet, aus der gemessenen Ausschüttung seit dem letzten Lauf (Belohnungszähler des Pools), der gestakten Liquidität und Preisen, die der Bot selbst aus den Pools ableitet. Sie gelten nur, solange die Position im Bereich ist. Handelsgebühren sind nicht enthalten.</p>
 
 <h2>Angebundene DEXe</h2>
 <div class="tabelle"><table>
-  <thead><tr><th>Chain</th><th>DEX</th><th>Stand</th><th class="zahl">Pools</th><th class="zahl">laufende Farmen</th></tr></thead>
+  <thead><tr><th>Chain</th><th>DEX</th><th>Stand</th><th class="zahl">Pools</th><th class="zahl">mit Farm</th><th class="zahl">Ausschüttung gemessen</th><th>Belohnung</th><th class="zahl">Liquidität Belohnung</th><th class="zahl">Ausschüttung/Tag</th></tr></thead>
   <tbody id="dexe"></tbody>
 </table></div>
 </main>
@@ -85,7 +85,12 @@ function zeichne(){
   const liste = daten.farmen.filter(f => (!nurOk || f.alle_regeln_ok) && (!chain || f.chain === chain))
     .sort((x,y) => (y.mein_apr[b]||0) - (x.mein_apr[b]||0));
   const tb = $("zeilen"); tb.innerHTML = "";
-  if(!liste.length){ tb.innerHTML = '<tr><td colspan="10" class="leer">Keine Farm in dieser Ansicht.</td></tr>'; }
+  if(!liste.length){
+    const ersterLauf = daten.dexe.every(d => !d.gemessen);
+    tb.innerHTML = '<tr><td colspan="10" class="leer">' + (ersterLauf
+      ? 'Erster Lauf: Die Ausschüttung wird gemessen, indem der Bot den Belohnungszähler jeder Farm mit dem nächsten Lauf vergleicht. Ab dem zweiten Lauf stehen hier echte Werte.'
+      : 'Keine Farm in dieser Ansicht.') + '</td></tr>';
+  }
   for(const f of liste){
     const tr = document.createElement("tr");
     const regeln = Object.entries(f.pruefung).map(([k,v]) => `<span class="marke ${v?"ok":"nein"}">${REGELNAMEN[k]||k}</span>`).join("");
@@ -103,7 +108,10 @@ function zeichne(){
   for(const d of daten.dexe){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${d.chain}</td><td>${d.dex}</td><td>${d.stand==="ok"?'<span class="marke ok">läuft</span>':`<span class="marke nein">${d.stand}</span>`}</td>
-      <td class="zahl">${d.pools_gesamt??"–"}</td><td class="zahl">${d.laufende_farmen??"–"}</td>`;
+      <td class="zahl">${d.pools_gesamt??"–"}</td><td class="zahl">${d.pools_mit_farm??"–"}</td>
+      <td class="zahl">${d.gemessen??"–"}</td>
+      <td>${d.belohnung??"–"}${d.belohnung_preis!=null?'<br><span class="klein">'+d.belohnung_preis.toPrecision(4)+' $</span>':''}</td>
+      <td class="zahl">${usd(d.belohnung_liquiditaet_usd)}</td><td class="zahl">${usd(d.ausschuettung_tag_usd)}</td>`;
     dx.appendChild(tr);
   }
 }
