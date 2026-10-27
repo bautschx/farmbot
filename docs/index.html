@@ -64,6 +64,24 @@ h2{font-size:17px;margin:28px 0 10px}
 </table></div>
 <p class="klein">„Dein APR“ und „Dein Ertrag/Tag“ sind für eine eigene Position mit dem eingestellten Betrag im gewählten Bereich gerechnet, bei Up33 aus der gemessenen Ausschüttung seit dem letzten Lauf (Belohnungszähler des Pools), bei Aero aus der Gesamtausschüttung des Gauges im Voter zwischen zwei Läufen, bei Blackhole, Pharaoh und PancakeSwap aus der Vertragsrate, jeweils mit dem Median der Liquidität im Kursbereich der letzten 24 h („Median aus n“ Messungen), der gestakten Liquidität und Preisen, die der Bot selbst aus den Pools ableitet. Sie gelten nur, solange die Position im Bereich ist. Handelsgebühren sind nicht enthalten.</p>
 
+<h2>Simulation (Papierhandel)</h2>
+<p class="klein" style="margin-top:-4px">Der Bot geht selbst mit bis zu drei Papier-Positionen zu je 100 $ (±2 %) in die besten Farmen, die alle Regeln bestehen, und rechnet sie bei jedem Lauf mit echten Kursen und Ausschüttungen weiter: Belohnung nur für die Zeit im Bereich, Nachziehen mit Tausch- und Gaskosten, Ausstieg nach den Regeln. Handelsgebühren sind nicht gutgeschrieben, die Gas-Einheiten sind noch Annahmen.</p>
+<div class="kacheln">
+  <div class="kachel"><b id="s-offen">–</b><span>offene Positionen</span></div>
+  <div class="kachel"><b id="s-erg-offen">–</b><span>Ergebnis offen</span></div>
+  <div class="kachel"><b id="s-erg-zu">–</b><span>Ergebnis abgeschlossen</span></div>
+  <div class="kachel"><b id="s-trades">–</b><span>Trades (davon im Plus)</span></div>
+</div>
+<div class="tabelle"><table>
+  <thead><tr><th>Chain · DEX</th><th>Paar</th><th>seit</th><th>jetzt</th><th class="zahl">Positionswert</th><th class="zahl">Belohnung</th><th class="zahl">ggü. nur Halten</th><th class="zahl">Kosten</th><th class="zahl">nachgezogen</th><th class="zahl">Ergebnis</th></tr></thead>
+  <tbody id="sim-offen"></tbody>
+</table></div>
+<h2 style="font-size:15px">Abgeschlossene Trades (Erfahrungswerte)</h2>
+<div class="tabelle"><table>
+  <thead><tr><th>Paar</th><th>Chain · DEX</th><th class="zahl">Tage</th><th>Grund</th><th class="zahl">Ergebnis</th><th class="zahl">APR real</th><th class="zahl">APR Start</th><th class="zahl">Belohnung</th><th class="zahl">Kurseffekt</th><th class="zahl">Kosten</th><th class="zahl">im Bereich</th></tr></thead>
+  <tbody id="sim-zu"></tbody>
+</table></div>
+
 <h2>Angebundene DEXe</h2>
 <div class="tabelle"><table>
   <thead><tr><th>Chain</th><th>DEX</th><th>Stand</th><th class="zahl">Pools</th><th class="zahl">mit Farm</th><th class="zahl">Ausschüttung gemessen</th><th>Belohnung</th><th class="zahl">Liquidität Belohnung</th><th class="zahl">Ausschüttung/Tag</th></tr></thead>
@@ -135,6 +153,44 @@ async function laden(){
 }
 ["f-regeln","f-chain","f-bereich"].forEach(id => $(id).addEventListener("change", zeichne));
 laden();
+
+const vz = (x, n=2) => x == null ? "–" : (x > 0 ? "+" : "") + x.toLocaleString("de-AT",{minimumFractionDigits:n,maximumFractionDigits:n}) + " $";
+const farbe = x => x == null ? "" : (x >= 0 ? "color:var(--gut)" : "color:var(--schlecht)");
+async function simLaden(){
+  let s;
+  try { const r = await fetch("data/simulation.json?t=" + Date.now()); if(!r.ok) throw 0; s = await r.json(); }
+  catch(e){ $("sim-offen").innerHTML = '<tr><td colspan="10" class="leer">Die Simulation startet, sobald die erste Farm alle Regeln besteht.</td></tr>'; return; }
+  const k = s.kennzahlen || {};
+  $("s-offen").textContent = (k.offen ?? 0) + " / 3";
+  $("s-erg-offen").textContent = vz(k.ergebnis_offen_usd); $("s-erg-offen").style.cssText = farbe(k.ergebnis_offen_usd);
+  $("s-erg-zu").textContent = vz(k.ergebnis_geschlossen_usd); $("s-erg-zu").style.cssText = farbe(k.ergebnis_geschlossen_usd);
+  $("s-trades").textContent = (k.trades ?? 0) + " (" + (k.gewinner ?? 0) + ")";
+  const offen = s.offen || [], zu = (s.geschlossen || []).slice().reverse();
+  const tb = $("sim-offen"); tb.innerHTML = offen.length ? "" : '<tr><td colspan="10" class="leer">Keine offene Position. Der Bot geht rein, sobald eine Farm alle Regeln besteht.</td></tr>';
+  for (const p of offen){
+    const erg = p.wert_usd + p.belohnung_usd * 0.997 - p.einsatz_usd;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.chain}<br><span class="klein">${p.dex}</span></td><td>${p.paar}<br><span class="klein">${p.belohnung}</span></td>
+      <td>${new Date(p.start*1000).toLocaleString("de-AT",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}<br><span class="klein">${(p.laufzeit_s/86400).toFixed(1)} Tage</span></td>
+      <td>${p.im_bereich?'<span class="marke ok">im Bereich</span>':'<span class="marke nein">außerhalb</span>'}</td>
+      <td class="zahl">${usd(p.wert_usd,2)}</td><td class="zahl">${usd(p.belohnung_usd,2)}</td>
+      <td class="zahl">${vz(p.wert_usd - p.gehalten_usd)}</td><td class="zahl">${usd(p.kosten_usd,2)}</td>
+      <td class="zahl">${p.nachgezogen}×</td><td class="zahl"><b style="${farbe(erg)}">${vz(erg)}</b></td>`;
+    tb.appendChild(tr);
+  }
+  const tz = $("sim-zu"); tz.innerHTML = zu.length ? "" : '<tr><td colspan="11" class="leer">Noch kein abgeschlossener Trade.</td></tr>';
+  for (const t of zu){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${t.paar}</td><td>${t.chain}<br><span class="klein">${t.dex}</span></td><td class="zahl">${t.tage}</td>
+      <td style="white-space:normal;min-width:180px">${t.grund}</td>
+      <td class="zahl"><b style="${farbe(t.ergebnis_usd)}">${vz(t.ergebnis_usd)}</b><br><span class="klein">${pz(t.ergebnis_prozent,2)}</span></td>
+      <td class="zahl">${pz(t.apr_real_prozent)}</td><td class="zahl">${pz(t.apr_start)}</td>
+      <td class="zahl">${usd(t.belohnung_usd,2)}</td><td class="zahl">${vz(t.kurseffekt_usd)}</td><td class="zahl">${usd(t.kosten_usd,2)}</td>
+      <td class="zahl">${pz(t.im_bereich_prozent)}</td>`;
+    tz.appendChild(tr);
+  }
+}
+simLaden();
 </script>
 </body>
 </html>
