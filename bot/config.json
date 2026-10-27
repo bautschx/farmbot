@@ -11,6 +11,8 @@
     "min_liquiditaet_faktor_emission": 10,
     "max_tagesminus_belohnung_prozent": 30,
     "max_paar_schwankung_24h_prozent": 30,
+    "max_abwaertstrend_24h_prozent": 10,
+    "max_abwaertstrend_6h_prozent": 5,
     "min_bereich_prozent": 2,
     "bereich_faktor_schwankung": 0.5,
     "min_pool_tvl_usd": 20000

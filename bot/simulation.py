@@ -120,6 +120,12 @@ def laufen(daten, konfig, zustand):
         elif not p.get("auszahlung_sicher", True):
             grund = "Auszahlung kann einbehalten werden"
         else:
+            # Coin im Paar im Abwaertstrend: 2 Laeufe in Folge, damit ein einzelner Ausreisser nicht reicht
+            fallend = not p.get("kein_abwaertstrend", True)
+            pos["trend_schwach"] = pos.get("trend_schwach", 0) + 1 if fallend else 0
+            if pos["trend_schwach"] >= 2:
+                grund = "Coin im Paar im Abwärtstrend (2 Läufe)"
+        if not grund:
             # Ausstieg erst unter ausstieg_apr_prozent (Regel 4: 200 %), Einstieg verlangt min_apr_prozent (500 %)
             grenze = regeln.get("ausstieg_apr_prozent", regeln["min_apr_prozent"])
             schwach = (pos["apr_jetzt"] or 0) < grenze  # APR im Bereich DIESER Position
@@ -166,13 +172,16 @@ def laufen(daten, konfig, zustand):
             "start_x0": neu["x0"], "start_x1": neu["x1"], "im_bereich": True,
             "wert_usd": e["einsatz_usd"] - kosten, "gehalten_usd": e["einsatz_usd"] - kosten,
             "belohnung_menge": 0.0, "belohnung_usd": 0.0, "kosten_usd": kosten, "nachgezogen": 0,
-            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "fehlt": 0, "apr_schwach": 0,
+            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "fehlt": 0, "apr_schwach": 0, "trend_schwach": 0,
             "apr_start": f.get("apr"), "apr_jetzt": f.get("apr"),
             "merkmale": {"bereich_prozent": breite, "bereich_mindest_prozent": f.get("bereich_mindest_prozent"),
                          "gebuehr_prozent": f["gebuehr_prozent"], "tvl_usd": f["tvl_usd"],
                          "paar_schwankung_24h_prozent": f.get("paar_schwankung_24h_prozent"),
                          "belohnung_24h_prozent": f.get("belohnung_24h_prozent"),
-                         "messpunkte": f.get("messpunkte")},
+                         "messpunkte": f.get("messpunkte"),
+                         # Kursaenderung der Coins im Paar beim Einstieg (6 h / 24 h / 7 Tage),
+                         # um spaeter zu sehen, ob Farmen mit Aufwaertstrend besser laufen
+                         "momentum": f.get("momentum")},
             "letzte": {k: sim[k] for k in ("p0", "p1", "d0", "d1")},
             "letzter_belohnungspreis": f["belohnung_preis"],
         }

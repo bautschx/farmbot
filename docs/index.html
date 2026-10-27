@@ -91,11 +91,18 @@ h2{font-size:17px;margin:28px 0 10px}
 
 <script>
 const EXPLORER = {"Base":"https://basescan.org/address/","OP Mainnet":"https://optimistic.etherscan.io/address/","Arbitrum":"https://arbiscan.io/address/","BNB Chain":"https://bscscan.com/address/","Avalanche":"https://snowtrace.io/address/"};
-const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 500 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt",paar_ruhig:"Paar ruhig (24 h)",auszahlung_sicher:"Auszahlung nicht einbehaltbar"};
+const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 500 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt",paar_ruhig:"Paar ruhig (24 h)",kein_abwaertstrend:"Kein Abwärtstrend",auszahlung_sicher:"Auszahlung nicht einbehaltbar"};
 let daten = null;
 const $ = id => document.getElementById(id);
 const usd = (x, n=0) => x == null ? "–" : x.toLocaleString("de-AT",{minimumFractionDigits:n,maximumFractionDigits:n}) + " $";
 const pz = (x, n=0) => x == null ? "–" : x.toLocaleString("de-AT",{maximumFractionDigits:n}) + " %";
+
+function trendText(f){
+  const m = f.momentum || {};
+  const teile = Object.entries(m).map(([sym,w]) => w["24h"]==null ? sym+" sammelt noch"
+    : sym+" "+(w["24h"]>0?"+":"")+pz(w["24h"],1)+" (24 h)"+(w["7t"]!=null?", "+(w["7t"]>0?"+":"")+pz(w["7t"],1)+" (7 T)":""));
+  return teile.length ? '<br><span class="klein">'+teile.join("<br>")+'</span>' : "";
+}
 
 function zeichne(){
   if(!daten) return;
@@ -115,7 +122,7 @@ function zeichne(){
     const regeln = Object.entries(f.pruefung).map(([k,v]) => `<span class="marke ${v?"ok":"nein"}">${REGELNAMEN[k]||k}</span>`).join("");
     const link = EXPLORER[f.chain] ? `<a href="${EXPLORER[f.chain]}${f.pool}" target="_blank" rel="noopener">${f.pool.slice(0,8)}…</a>` : f.pool.slice(0,8)+"…";
     const z24 = f.belohnung_24h_prozent;
-    tr.innerHTML = `<td>${f.chain}<br><span class="klein">${f.dex}</span></td><td>${f.paar}</td>
+    tr.innerHTML = `<td>${f.chain}<br><span class="klein">${f.dex}</span></td><td>${f.paar}${trendText(f)}</td>
       <td>${f.belohnung}<br><span class="klein">${f.belohnung_preis!=null?f.belohnung_preis.toPrecision(4)+" $":"Preis unbekannt"}</span></td>
       <td class="zahl"><b>${pz(aprV(f))}</b>${b==="e"&&f.bereich_prozent?'<br><span class="klein">bei ±'+f.bereich_prozent+' %</span>':''}${f.messpunkte?'<br><span class="klein">Median aus '+f.messpunkte+'</span>':''}</td><td class="zahl">${usd(b==="e"?f.ertrag_tag_usd:f.mein_ertrag_tag_usd[b],2)}</td>
       <td class="zahl">${usd(f.tvl_usd)}</td><td class="zahl">${f.paar_schwankung_24h_prozent==null?"<span class='klein'>sammelt noch</span>":pz(f.paar_schwankung_24h_prozent,1)}</td><td class="zahl">${pz(f.gebuehr_prozent,2)}</td>

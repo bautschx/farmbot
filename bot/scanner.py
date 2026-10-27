@@ -509,6 +509,27 @@ def scannen(konfig, cache, verlauf):
             alt = [p for t, p in ver if t <= jetzt - 23 * 3600]
             aend24 = (preis[rt] / alt[-1] - 1) * 100 if alt and rt in preis else None
 
+            # Dollarkurs-Verlauf jedes Coins in einem Farm-Paar (Momentum, Stefans Vorgabe 27.10.2026).
+            # Dollar-Token werden nicht geprueft. 8 Tage Verlauf, damit auch die 7-Tage-Aenderung geht.
+            dollar = set(cfg["dollar"])
+            for t in {t for f in farmen for t in (f["t0"], f["t1"])} - dollar:
+                if t in preis and preis[t] > 0:
+                    uk = f"{name}:usd:{t}"
+                    reihe = verlauf.setdefault(uk, [])
+                    reihe.append([jetzt, float(f"{preis[t]:.6g}")])
+                    # aelter als 24 h nur ein Punkt je 4 h, damit verlauf.json klein bleibt
+                    gesehen, neu = set(), []
+                    for x in reihe:
+                        if x[0] <= jetzt - 8 * 86400:
+                            continue
+                        if x[0] < jetzt - 86400:
+                            fach = x[0] // 14400
+                            if fach in gesehen:
+                                continue
+                            gesehen.add(fach)
+                        neu.append(x)
+                    verlauf[uk] = neu
+
             laufende = gemessen = 0
             for f in farmen:
                 if f["rate"] is not None:
@@ -544,6 +565,20 @@ def scannen(konfig, cache, verlauf):
                     tag = [x[1] for x in reihe if x[0] >= jetzt - 24 * 3600]
                     if reihe[0][0] <= jetzt - 23 * 3600 and min(tag) > 0:
                         schwankung = (max(tag) / min(tag) - 1) * 100
+                # Momentum der Coins im Paar (ohne Dollar-Token): Kursaenderung in $ ueber 6 h, 24 h, 7 Tage.
+                # Abwaertstrend ist der schlimmste Fall fuer eine Position mit Bereich: am Ende haelt man
+                # nur noch den fallenden Coin. Unbekannt (noch keine 24 h Verlauf) zaehlt als nicht bestanden.
+                momentum, trend_ok = {}, True
+                for t in (f["t0"], f["t1"]):
+                    if t in dollar:
+                        continue
+                    uk = f"{name}:usd:{t}"
+                    m = {z: kursaenderung(verlauf.get(uk, []), jetzt, h)
+                         for z, h in (("6h", 6), ("24h", 24), ("7t", 168))}
+                    momentum[tokens[t]["s"]] = m
+                    if m["24h"] is None or m["24h"] <= -regeln["max_abwaertstrend_24h_prozent"] or \
+                            (m["6h"] is not None and m["6h"] <= -regeln["max_abwaertstrend_6h_prozent"]):
+                        trend_ok = False
                 wahl, mindest = bereich_waehlen(pos, schwankung, regeln)
                 pw = pos.get(str(wahl)) if wahl else None
                 pruef = {
@@ -558,6 +593,7 @@ def scannen(konfig, cache, verlauf):
                     # unbekannt (noch keine 24 h Verlauf) zaehlt als nicht bestanden
                     "paar_ruhig": schwankung is not None and
                         schwankung <= regeln["max_paar_schwankung_24h_prozent"],
+                    "kein_abwaertstrend": trend_ok,
                     # DEX kann verdiente Belohnungen nach eigenem Ermessen einbehalten (z. B. Pharaoh)
                     "auszahlung_sicher": not dex.get("einbehalt"),
                 }
@@ -569,6 +605,7 @@ def scannen(konfig, cache, verlauf):
                     "belohnung_24h_prozent": None if aend24 is None else round(aend24, 1),
                     "gebuehr_prozent": gebuehr, "tvl_usd": round(tvl),
                     "paar_schwankung_24h_prozent": None if schwankung is None else round(schwankung, 1),
+                    "momentum": momentum,
                     "ausschuettung_tag_usd": round(f["rate"] * f["staked_L"] * 86400
                                                    / 10 ** tokens[rt]["d"] * preis.get(rt, 0), 2),
                     "messpunkte": messpunkte,
@@ -599,6 +636,17 @@ def scannen(konfig, cache, verlauf):
             status.append(eintrag)
     ergebnis.sort(key=lambda e: -(e["apr"] or 0))
     return {"zeit": jetzt, "position_usd": wert, "farmen": ergebnis, "dexe": status}
+
+
+def kursaenderung(reihe, jetzt, stunden):
+    """Kursaenderung in % gegen den juengsten Messpunkt, der mindestens 95 % der Zeitspanne alt ist
+    (Laeufe alle 30 min, daher kleine Toleranz). None, solange der Verlauf so weit nicht zurueckreicht."""
+    if not reihe:
+        return None
+    alt = [p for t, p in reihe if t <= jetzt - stunden * 3600 * 0.95]
+    if not alt or alt[-1] <= 0:
+        return None
+    return round((reihe[-1][1] / alt[-1] - 1) * 100, 1)
 
 
 def bereich_waehlen(pos, schwankung, regeln):
