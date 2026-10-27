@@ -29,6 +29,7 @@ Q96 = 2 ** 96
 Q128 = 2 ** 128
 JAHR = 365 * 24 * 3600
 NULL = "0x" + "0" * 40
+MIN_FENSTER = 1800  # Sekunden
 
 
 def _m(chain, aufrufe):
@@ -112,9 +113,10 @@ def farmen_lesen(chain, dex, paare, cache):
         schl = f"{chain.name}:{p}"
         alt = messung.get(schl)
         rate = alt.get("rate") if alt else None  # Belohnung je Liquiditaet und Sekunde
-        if alt and zeit > alt["zeit"]:
-            rate = (wachstum - int(alt["wachstum"])) / Q128 / (zeit - alt["zeit"])
-        if not alt or zeit > alt["zeit"]:
+        # Messfenster mindestens 30 Minuten, sonst verzerren einzelne Bewegungen den Wert
+        if alt and zeit - alt["zeit"] >= MIN_FENSTER:
+            rate = max(0, (wachstum - int(alt["wachstum"])) / Q128 / (zeit - alt["zeit"]))
+        if not alt or zeit - alt["zeit"] >= MIN_FENSTER:
             messung[schl] = {"wachstum": str(wachstum), "zeit": zeit, "rate": rate}
         farmen.append({
             "pool": p, "gauge": g, "dex": dex["name"], "belohnung": dex["belohnung"],
