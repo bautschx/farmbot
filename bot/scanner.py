@@ -346,6 +346,16 @@ def scannen(konfig, cache, verlauf):
                        for b in konfig["bereiche_prozent"]}
                 gebuehr = (f["fee"] or 0) / 10000
                 p2 = pos.get("2")
+                # Schwankung des Paares (Kurs Token0 in Token1) ueber die letzten 24 h, eigener Verlauf
+                schwankung = None
+                if f["t0"] in preis and f["t1"] in preis and preis[f["t1"]] > 0:
+                    pk = f"{name}:paar:{f['pool']}"
+                    reihe = verlauf.setdefault(pk, [])
+                    reihe.append([jetzt, preis[f["t0"]] / preis[f["t1"]]])
+                    verlauf[pk] = reihe = [x for x in reihe if x[0] > jetzt - 2 * 86400]
+                    tag = [x[1] for x in reihe if x[0] >= jetzt - 24 * 3600]
+                    if reihe[0][0] <= jetzt - 23 * 3600 and min(tag) > 0:
+                        schwankung = (max(tag) / min(tag) - 1) * 100
                 pruef = {
                     "gebuehr_ok": gebuehr <= regeln["max_poolgebuehr_prozent"],
                     "belohnung_nicht_im_paar": rt not in (f["t0"], f["t1"]),
@@ -355,6 +365,9 @@ def scannen(konfig, cache, verlauf):
                     "tvl_ok": tvl >= regeln["min_pool_tvl_usd"],
                     "preis_ok": aend24 is None or aend24 > -regeln["max_tagesminus_belohnung_prozent"],
                     "preis_bekannt": rt in preis and f["t0"] in preis and f["t1"] in preis,
+                    # unbekannt (noch keine 24 h Verlauf) zaehlt als nicht bestanden
+                    "paar_ruhig": schwankung is not None and
+                        schwankung <= regeln["max_paar_schwankung_24h_prozent"],
                 }
                 ergebnis.append({
                     "chain": name, "dex": f["dex"], "pool": f["pool"], "gauge": f["gauge"],
@@ -363,6 +376,7 @@ def scannen(konfig, cache, verlauf):
                     "belohnung_preis": preis.get(rt),
                     "belohnung_24h_prozent": None if aend24 is None else round(aend24, 1),
                     "gebuehr_prozent": gebuehr, "tvl_usd": round(tvl),
+                    "paar_schwankung_24h_prozent": None if schwankung is None else round(schwankung, 1),
                     "ausschuettung_tag_usd": round(f["rate"] * f["staked_L"] * 86400
                                                    / 10 ** tokens[rt]["d"] * preis.get(rt, 0), 2),
                     "mein_apr": {b: (None if v is None else round(v["apr"], 1)) for b, v in pos.items()},

@@ -11,6 +11,7 @@
     "ziel_apr_prozent": 600,
     "min_liquiditaet_faktor_emission": 10,
     "max_tagesminus_belohnung_prozent": 30,
+    "max_paar_schwankung_24h_prozent": 30,
     "min_pool_tvl_usd": 20000
   },
   "chains": {
