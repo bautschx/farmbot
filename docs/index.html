@@ -62,10 +62,10 @@ h2{font-size:17px;margin:28px 0 10px}
   </tr></thead>
   <tbody id="zeilen"></tbody>
 </table></div>
-<p class="klein">„Dein APR“ und „Dein Ertrag/Tag“ sind für eine eigene Position mit dem eingestellten Betrag im gewählten Bereich gerechnet, bei Up33 aus der gemessenen Ausschüttung seit dem letzten Lauf (Belohnungszähler des Pools), bei Aero aus der Gesamtausschüttung des Gauges im Voter zwischen zwei Läufen, bei Blackhole, Pharaoh und PancakeSwap aus der Vertragsrate, jeweils mit dem Median der Liquidität im Kursbereich der letzten 24 h („Median aus n“ Messungen), der gestakten Liquidität und Preisen, die der Bot selbst aus den Pools ableitet. Sie gelten nur, solange die Position im Bereich ist. Handelsgebühren sind nicht enthalten. Der empfohlene Bereich wird je Farm gewählt: mindestens ± die halbe 24-h-Schwankung des Paares (nie unter ±2 %), und so breit wie möglich, solange der APR dort noch das Ziel von 600 % schafft.</p>
+<p class="klein">„Dein APR“ und „Dein Ertrag/Tag“ sind für eine eigene Position mit dem eingestellten Betrag im gewählten Bereich gerechnet, bei Up33 aus der gemessenen Ausschüttung seit dem letzten Lauf (Belohnungszähler des Pools), bei Aero aus der Gesamtausschüttung des Gauges im Voter zwischen zwei Läufen, bei Blackhole, Pharaoh und PancakeSwap aus der Vertragsrate, jeweils mit dem Median der Liquidität im Kursbereich der letzten 24 h („Median aus n“ Messungen), der gestakten Liquidität und Preisen, die der Bot selbst aus den Pools ableitet. Sie gelten nur, solange die Position im Bereich ist. Handelsgebühren sind nicht enthalten. Der empfohlene Bereich wird je Farm gewählt: mindestens ± die halbe 24-h-Schwankung des Paares (nie unter ±2 %). Liegt der APR im engsten erlaubten Bereich bei 2.000 % oder mehr, bleibt er eng. Sonst so breit wie möglich, solange der APR dort noch 1.000 % schafft. Unter 500 % besteht die Farm die Regel nicht.</p>
 
 <h2>Simulation (Papierhandel)</h2>
-<p class="klein" style="margin-top:-4px">Der Bot geht selbst mit bis zu drei Papier-Positionen zu je 100 $ (Bereich je Farm) in die besten Farmen, die alle Regeln bestehen, und rechnet sie bei jedem Lauf mit echten Kursen und Ausschüttungen weiter: Belohnung nur für die Zeit im Bereich, Nachziehen mit Tausch- und Gaskosten, Ausstieg nach den Regeln. Handelsgebühren sind nicht gutgeschrieben, die Gas-Einheiten sind noch Annahmen.</p>
+<p class="klein" style="margin-top:-4px">Der Bot geht selbst mit bis zu drei Papier-Positionen zu je 100 $ (Bereich je Farm) in die besten Farmen, die alle Regeln bestehen, und rechnet sie bei jedem Lauf mit echten Kursen und Ausschüttungen weiter: Belohnung nur für die Zeit im Bereich, Nachziehen mit Tausch- und Gaskosten, Ausstieg nach den Regeln (APR zwei Läufe unter 200 %, Belohnung −30 % in 24 h, Regel 2). Handelsgebühren sind nicht gutgeschrieben, die Gas-Einheiten sind noch Annahmen.</p>
 <div class="kacheln">
   <div class="kachel"><b id="s-offen">–</b><span>offene Positionen</span></div>
   <div class="kachel"><b id="s-erg-offen">–</b><span>Ergebnis offen</span></div>
@@ -91,7 +91,7 @@ h2{font-size:17px;margin:28px 0 10px}
 
 <script>
 const EXPLORER = {"Base":"https://basescan.org/address/","OP Mainnet":"https://optimistic.etherscan.io/address/","Arbitrum":"https://arbiscan.io/address/","BNB Chain":"https://bscscan.com/address/","Avalanche":"https://snowtrace.io/address/"};
-const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 200 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt",paar_ruhig:"Paar ruhig (24 h)",auszahlung_sicher:"Auszahlung nicht einbehaltbar"};
+const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 500 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt",paar_ruhig:"Paar ruhig (24 h)",auszahlung_sicher:"Auszahlung nicht einbehaltbar"};
 let daten = null;
 const $ = id => document.getElementById(id);
 const usd = (x, n=0) => x == null ? "–" : x.toLocaleString("de-AT",{minimumFractionDigits:n,maximumFractionDigits:n}) + " $";
