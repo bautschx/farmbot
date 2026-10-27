@@ -121,13 +121,21 @@ def farmen_lesen(chain, dex, paare, cache):
         if None in (t0, t1, wachstum, zeit) or r[2] is None:
             continue  # anderer Vertragstyp
         schl = f"{chain.name}:{p}"
+        L_jetzt = als_int(r[3]) or 0
         alt = messung.get(schl)
+        if alt and "L" not in alt:
+            alt = None  # Messung aus aelterer Fassung ohne Liquiditaet: neu beginnen
         rate = alt.get("rate") if alt else None  # Belohnung je Liquiditaet und Sekunde
         # Messfenster mindestens 30 Minuten, sonst verzerren einzelne Bewegungen den Wert
         if alt and zeit - alt["zeit"] >= MIN_FENSTER:
-            rate = max(0, (wachstum - int(alt["wachstum"])) / Q128 / (zeit - alt["zeit"]))
+            je_L = max(0, (wachstum - int(alt["wachstum"])) / Q128 / (zeit - alt["zeit"]))
+            # Gesamtausschuettung vorsichtig ueber die kleinere der beiden Liquiditaeten schaetzen.
+            # Sonst wuerde eine Farm, in der waehrend des Fensters kaum Liquiditaet lag und jetzt
+            # viel liegt, eine riesige Rate je Liquiditaet auf die neue Menge hochrechnen.
+            L_min = min(int(alt["L"]), L_jetzt)
+            rate = je_L * L_min / L_jetzt if L_jetzt else 0.0
         if not alt or zeit - alt["zeit"] >= MIN_FENSTER:
-            messung[schl] = {"wachstum": str(wachstum), "zeit": zeit, "rate": rate}
+            messung[schl] = {"wachstum": str(wachstum), "zeit": zeit, "rate": rate, "L": str(L_jetzt)}
         farmen.append({
             "pool": p, "gauge": g, "dex": dex["name"], "belohnung": dex["belohnung"],
             "t0": t0, "t1": t1, "sqrtP": als_int(r[2], 0), "tick": als_int(r[2], 1, signed=True),
