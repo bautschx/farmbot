@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Farmbot</title>
+<style>
+:root{--bg:#f6f7f9;--karte:#fff;--text:#16181d;--leise:#636a76;--linie:#e3e6eb;--gut:#1f8a4c;--gutbg:#e6f4ec;--schlecht:#b4331f;--schlechtbg:#fbeae6;--akzent:#2f5bd3}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--karte:#171a20;--text:#e8eaee;--leise:#9aa1ad;--linie:#272b33;--gut:#4cc27f;--gutbg:#16301f;--schlecht:#f0816b;--schlechtbg:#3a1d17;--akzent:#7d9cff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;font-size:15px;line-height:1.45}
+main{max-width:1200px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;margin:0 0 4px}
+.unter{color:var(--leise);margin:0 0 18px}
+.kacheln{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:18px}
+.kachel{background:var(--karte);border:1px solid var(--linie);border-radius:10px;padding:12px 14px}
+.kachel b{display:block;font-size:22px}
+.kachel span{color:var(--leise);font-size:13px}
+.leiste{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0 12px}
+label{color:var(--leise);font-size:14px}
+select,input[type=number]{font:inherit;background:var(--karte);color:var(--text);border:1px solid var(--linie);border-radius:8px;padding:5px 8px}
+.tabelle{overflow-x:auto;background:var(--karte);border:1px solid var(--linie);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:900px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--linie);text-align:left;vertical-align:top;white-space:nowrap}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--leise);font-weight:600;position:sticky;top:0;background:var(--karte)}
+td.zahl,th.zahl{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.marke{display:inline-block;padding:1px 7px;border-radius:999px;font-size:12px;margin:1px 2px 1px 0}
+.ok{background:var(--gutbg);color:var(--gut)}
+.nein{background:var(--schlechtbg);color:var(--schlecht)}
+a{color:var(--akzent);text-decoration:none}
+a:hover{text-decoration:underline}
+h2{font-size:17px;margin:28px 0 10px}
+.klein{color:var(--leise);font-size:13px}
+.leer{padding:24px;color:var(--leise)}
+</style>
+</head>
+<body>
+<main>
+<h1>Farmbot</h1>
+<p class="unter" id="stand">Lade Daten …</p>
+
+<div class="kacheln">
+  <div class="kachel"><b id="k-farmen">–</b><span>laufende Farmen gefunden</span></div>
+  <div class="kachel"><b id="k-ok">–</b><span>bestehen alle Regeln</span></div>
+  <div class="kachel"><b id="k-best">–</b><span>bester APR für dich (±2 %)</span></div>
+  <div class="kachel"><b id="k-dexe">–</b><span>DEXe angebunden</span></div>
+</div>
+
+<div class="leiste">
+  <label>Ansicht <select id="f-regeln"><option value="ok">nur alle Regeln erfüllt</option><option value="alle">alle laufenden Farmen</option></select></label>
+  <label>Chain <select id="f-chain"><option value="">alle</option></select></label>
+  <label>Bereich <select id="f-bereich"><option value="2">±2 %</option><option value="4">±4 %</option></select></label>
+</div>
+
+<div class="tabelle"><table>
+  <thead><tr>
+    <th>Chain · DEX</th><th>Paar</th><th>Belohnung</th>
+    <th class="zahl">Dein APR</th><th class="zahl">Dein Ertrag/Tag</th>
+    <th class="zahl">Pool-TVL</th><th class="zahl">Gebühr</th><th class="zahl">Belohnung 24 h</th>
+    <th>Regeln</th><th>Pool</th>
+  </tr></thead>
+  <tbody id="zeilen"></tbody>
+</table></div>
+<p class="klein">„Dein APR“ und „Dein Ertrag/Tag“ sind für eine eigene Position mit dem eingestellten Betrag im gewählten Bereich gerechnet, aus den aktuellen Vertragsdaten (Ausschüttung pro Sekunde, gestakte Liquidität, Preise aus den Pools). Sie gelten nur, solange die Position im Bereich ist. Handelsgebühren sind nicht enthalten.</p>
+
+<h2>Angebundene DEXe</h2>
+<div class="tabelle"><table>
+  <thead><tr><th>Chain</th><th>DEX</th><th>Stand</th><th class="zahl">Pools</th><th class="zahl">laufende Farmen</th></tr></thead>
+  <tbody id="dexe"></tbody>
+</table></div>
+</main>
+
+<script>
+const EXPLORER = {"Base":"https://basescan.org/address/","OP Mainnet":"https://optimistic.etherscan.io/address/","Arbitrum":"https://arbiscan.io/address/","BNB Chain":"https://bscscan.com/address/","Avalanche":"https://snowtrace.io/address/"};
+const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 200 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt"};
+let daten = null;
+const $ = id => document.getElementById(id);
+const usd = (x, n=0) => x == null ? "–" : x.toLocaleString("de-AT",{minimumFractionDigits:n,maximumFractionDigits:n}) + " $";
+const pz = (x, n=0) => x == null ? "–" : x.toLocaleString("de-AT",{maximumFractionDigits:n}) + " %";
+
+function zeichne(){
+  if(!daten) return;
+  const nurOk = $("f-regeln").value === "ok", chain = $("f-chain").value, b = $("f-bereich").value;
+  const liste = daten.farmen.filter(f => (!nurOk || f.alle_regeln_ok) && (!chain || f.chain === chain))
+    .sort((x,y) => (y.mein_apr[b]||0) - (x.mein_apr[b]||0));
+  const tb = $("zeilen"); tb.innerHTML = "";
+  if(!liste.length){ tb.innerHTML = '<tr><td colspan="10" class="leer">Keine Farm in dieser Ansicht.</td></tr>'; }
+  for(const f of liste){
+    const tr = document.createElement("tr");
+    const regeln = Object.entries(f.pruefung).map(([k,v]) => `<span class="marke ${v?"ok":"nein"}">${REGELNAMEN[k]||k}</span>`).join("");
+    const link = EXPLORER[f.chain] ? `<a href="${EXPLORER[f.chain]}${f.pool}" target="_blank" rel="noopener">${f.pool.slice(0,8)}…</a>` : f.pool.slice(0,8)+"…";
+    const z24 = f.belohnung_24h_prozent;
+    tr.innerHTML = `<td>${f.chain}<br><span class="klein">${f.dex}</span></td><td>${f.paar}</td>
+      <td>${f.belohnung}<br><span class="klein">${f.belohnung_preis!=null?f.belohnung_preis.toPrecision(4)+" $":"Preis unbekannt"}</span></td>
+      <td class="zahl"><b>${pz(f.mein_apr[b])}</b></td><td class="zahl">${usd(f.mein_ertrag_tag_usd[b],2)}</td>
+      <td class="zahl">${usd(f.tvl_usd)}</td><td class="zahl">${pz(f.gebuehr_prozent,2)}</td>
+      <td class="zahl">${z24==null?"<span class='klein'>sammelt noch</span>":pz(z24,1)}</td>
+      <td style="white-space:normal;min-width:260px">${regeln}</td><td>${link}</td>`;
+    tb.appendChild(tr);
+  }
+  const dx = $("dexe"); dx.innerHTML = "";
+  for(const d of daten.dexe){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${d.chain}</td><td>${d.dex}</td><td>${d.stand==="ok"?'<span class="marke ok">läuft</span>':`<span class="marke nein">${d.stand}</span>`}</td>
+      <td class="zahl">${d.pools_gesamt??"–"}</td><td class="zahl">${d.laufende_farmen??"–"}</td>`;
+    dx.appendChild(tr);
+  }
+}
+
+async function laden(){
+  try{
+    const r = await fetch("data/farmen.json?t=" + Date.now());
+    if(!r.ok) throw new Error(r.status);
+    daten = await r.json();
+  }catch(e){ $("stand").textContent = "Noch keine Daten. Der erste Lauf des Bots füllt diese Seite."; return; }
+  const t = new Date(daten.zeit*1000);
+  $("stand").textContent = `Letzter Lauf: ${t.toLocaleString("de-AT")} · Position gerechnet mit ${daten.position_usd} $ · Laufzeit ${daten.dauer_s} s`;
+  $("k-farmen").textContent = daten.farmen.length;
+  $("k-ok").textContent = daten.farmen.filter(f=>f.alle_regeln_ok).length;
+  const best = daten.farmen.filter(f=>f.alle_regeln_ok).map(f=>f.mein_apr["2"]||0);
+  $("k-best").textContent = best.length ? pz(Math.max(...best)) : "–";
+  $("k-dexe").textContent = daten.dexe.filter(d=>d.stand==="ok").length + " / " + daten.dexe.length;
+  const chains = [...new Set(daten.farmen.map(f=>f.chain))].sort();
+  const sel = $("f-chain"); for(const c of chains){ const o=document.createElement("option"); o.value=o.textContent=c; sel.appendChild(o); }
+  zeichne();
+}
+["f-regeln","f-chain","f-bereich"].forEach(id => $(id).addEventListener("change", zeichne));
+laden();
+</script>
+</body>
+</html>
