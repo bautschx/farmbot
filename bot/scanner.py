@@ -1,9 +1,13 @@
 """Farm-Jagd direkt aus der Blockchain, ohne vfat oder andere Plattformen.
 
-Ablauf je DEX: Aus einem bekannten Gauge den Voter ermitteln, alle Pools des
-Voters durchgehen, lebende Gauges mit laufender Belohnung finden, Preise aus
-den Pools selbst ableiten und fuer eine eigene Position (z. B. 100 $ bei ±2 %)
-ausrechnen, was sie wirklich bekommen wuerde. Danach Stefans Regeln anwenden.
+Messprinzip (am 27.10.2026 an Aero und Up33 geprueft): Jeder Pool mit Farm fuehrt
+einen Zaehler rewardGrowthGlobalX128 = ausgeschuettete Belohnung je Einheit
+gestakter Liquidität im Bereich. Der Bot liest den Zaehler bei jedem Lauf und
+rechnet aus dem Zuwachs seit dem letzten Lauf die echte Ausschuettung pro Sekunde.
+Das ist gemessen, keine Schaufenster-Zahl, und funktioniert ohne Archiv-Knoten.
+
+Fuer eine eigene Position (z. B. 100 $ bei ±2 %) ergibt sich daraus, was sie im
+Bereich wirklich bekommt. Danach werden Stefans Regeln angewendet.
 """
 import math
 import time
@@ -11,16 +15,20 @@ import time
 from rpc import Chain, aufruf, als_int, als_adr, als_text, RPCFehler
 
 S = {  # Funktions-Selektoren (keccak256, erste 4 Bytes), am 27.10.2026 berechnet
+    "factory": "c45a0155", "allPoolsLength": "efde4e64", "allPools": "41d1de97",
+    "gauge": "a6f19c84", "rewardGrowthGlobalX128": "57806ada", "lastUpdated": "d0b06f5d",
+    "slot0": "3850c7bd", "token0": "0dfe1681", "token1": "d21220a7",
+    "tickSpacing": "d0c93a7c", "stakedLiquidity": "3ab04b20", "fee": "ddca3f43",
+    "decimals": "313ce567", "symbol": "95d89b41", "balanceOf": "70a08231",
+    # fuer die Diagnose aelterer Vertraege
     "voter": "46c96aac", "nft": "47ccca02", "pool": "16f0115b",
     "rewardToken": "f7c618c1", "rewardRate": "7b0a47ee", "periodFinish": "ebe2b12b",
-    "length": "1f7b6d32", "pools": "ac4afa38", "gauges": "b9a09fd5", "isAlive": "1703e5f9",
-    "slot0": "3850c7bd", "token0": "0dfe1681", "token1": "d21220a7",
-    "tickSpacing": "d0c93a7c", "liquidity": "1a686502", "stakedLiquidity": "3ab04b20",
-    "fee": "ddca3f43", "decimals": "313ce567", "symbol": "95d89b41",
-    "balanceOf": "70a08231",
+    "length": "1f7b6d32",
 }
 Q96 = 2 ** 96
+Q128 = 2 ** 128
 JAHR = 365 * 24 * 3600
+NULL = "0x" + "0" * 40
 
 
 def _m(chain, aufrufe):
@@ -29,19 +37,46 @@ def _m(chain, aufrufe):
 
 # ---------- Struktur einlesen ----------
 
-def voter_pools(chain, dex, cache, max_neu=4000):
-    """Alle Pool-Adressen des Voters, neue Eintraege werden nachgeladen."""
-    schl = f"{chain.name}|{dex['name']}"
-    c = cache.setdefault("voter", {}).setdefault(schl, {})
-    if not c.get("voter"):
-        c["voter"] = als_adr(chain.call(dex["seed_gauge"], aufruf(S["voter"])))
-    voter = c["voter"]
-    anzahl = als_int(chain.call(voter, aufruf(S["length"])))
-    bekannt = c.setdefault("pools", [])
-    fehlend = list(range(len(bekannt), min(anzahl, len(bekannt) + max_neu)))
-    res = _m(chain, [(voter, aufruf(S["pools"], i)) for i in fehlend])
-    bekannt.extend(als_adr(r) for r in res)
-    return voter, anzahl, [p for p in bekannt if p]
+def pools_mit_farm(chain, dex, cache):
+    """Alle Pools der Factory (Token-Paar gemerkt, aendert sich nie) und je Pool
+    der Gauge (Farm-Vertrag) oder keiner."""
+    c = cache.setdefault("dex", {}).setdefault(f"{chain.name}|{dex['name']}", {})
+    if not c.get("factory"):
+        c["factory"] = als_adr(chain.call(dex["seed_pool"], aufruf(S["factory"])))
+    fabrik = c["factory"]
+    anzahl = als_int(chain.call(fabrik, aufruf(S["allPoolsLength"])))
+    bekannt = c.setdefault("pools", [])  # [adresse, token0, token1]
+    neu = [als_adr(r) for r in _m(chain, [(fabrik, aufruf(S["allPools"], i))
+                                          for i in range(len(bekannt), anzahl)])]
+    tok = _m(chain, [(p, aufruf(S[f])) for p in neu if p for f in ("token0", "token1")])
+    j = 0
+    for p in neu:
+        if not p:
+            bekannt.append([None, None, None])
+            continue
+        bekannt.append([p, als_adr(tok[j]), als_adr(tok[j + 1])])
+        j += 2
+    pools = [b for b in bekannt if b[0] and b[1] and b[2]]
+    gauges = _m(chain, [(b[0], aufruf(S["gauge"])) for b in pools])
+    paare = [(b[0], als_adr(g)) for b, g in zip(pools, gauges) if g and als_adr(g) != NULL]
+    return fabrik, anzahl, pools, paare
+
+
+def marktdaten(chain, pools):
+    """Kurs und Bestaende aller Pools, fuer Preise und die Liquiditaet (Regel 2)."""
+    aufr = []
+    for p, t0, t1 in pools:
+        aufr += [(p, aufruf(S["slot0"])), (t0, aufruf(S["balanceOf"], p)),
+                 (t1, aufruf(S["balanceOf"], p))]
+    res = _m(chain, aufr)
+    markt = []
+    for i, (p, t0, t1) in enumerate(pools):
+        sq = als_int(res[3 * i], 0)
+        if not sq:
+            continue
+        markt.append({"pool": p, "t0": t0, "t1": t1, "sqrtP": sq,
+                      "b0": als_int(res[3 * i + 1]) or 0, "b1": als_int(res[3 * i + 2]) or 0})
+    return markt
 
 
 def token_infos(chain, tokens, cache):
@@ -58,62 +93,55 @@ def token_infos(chain, tokens, cache):
     return {t: tc[f"{chain.name}:{t}"] for t in tokens}
 
 
-def farmen_lesen(chain, dex, voter, pools):
-    """Lebende Gauges mit laufender Belohnung und die Pooldaten dazu."""
-    res = _m(chain, [(voter, aufruf(S["gauges"], p)) for p in pools])
-    paare = [(p, als_adr(g)) for p, g in zip(pools, res)
-             if g and als_adr(g) != "0x" + "0" * 40]
-    lebend = _m(chain, [(voter, aufruf(S["isAlive"], g)) for _, g in paare])
-    paare = [pg for pg, a in zip(paare, lebend) if als_int(a) == 1]
+FELDER = ["token0", "token1", "slot0", "stakedLiquidity", "tickSpacing", "fee",
+          "rewardGrowthGlobalX128", "lastUpdated"]
 
-    felder_g = ["rewardRate", "periodFinish", "rewardToken"]
-    felder_p = ["token0", "token1", "slot0", "stakedLiquidity", "liquidity",
-                "tickSpacing", "fee"]
-    aufr = []
-    for p, g in paare:
-        aufr += [(g, aufruf(S[f])) for f in felder_g]
-        aufr += [(p, aufruf(S[f])) for f in felder_p]
+
+def farmen_lesen(chain, dex, paare, cache):
+    aufr = [(p, aufruf(S[f])) for p, _ in paare for f in FELDER]
     res = _m(chain, aufr)
-    jetzt = time.time()
+    k = len(FELDER)
+    messung = cache.setdefault("messung", {})
     farmen = []
-    k = len(felder_g) + len(felder_p)
     for i, (p, g) in enumerate(paare):
         r = res[i * k:(i + 1) * k]
-        rate, ende, rt = als_int(r[0]), als_int(r[1]), als_adr(r[2])
-        t0, t1 = als_adr(r[3]), als_adr(r[4])
-        if None in (rate, ende, rt, t0, t1) or r[5] is None:
-            continue  # kein konzentrierter Pool oder anderer Vertragstyp
+        t0, t1 = als_adr(r[0]), als_adr(r[1])
+        wachstum, zeit = als_int(r[6]), als_int(r[7])
+        if None in (t0, t1, wachstum, zeit) or r[2] is None:
+            continue  # anderer Vertragstyp
+        schl = f"{chain.name}:{p}"
+        alt = messung.get(schl)
+        rate = alt.get("rate") if alt else None  # Belohnung je Liquiditaet und Sekunde
+        if alt and zeit > alt["zeit"]:
+            rate = (wachstum - int(alt["wachstum"])) / Q128 / (zeit - alt["zeit"])
+        if not alt or zeit > alt["zeit"]:
+            messung[schl] = {"wachstum": str(wachstum), "zeit": zeit, "rate": rate}
         farmen.append({
-            "pool": p, "gauge": g, "dex": dex["name"],
-            "belohnung": rt, "rate": rate, "laeuft": ende > jetzt and rate > 0,
-            "ende": ende, "t0": t0, "t1": t1,
-            "sqrtP": als_int(r[5], 0), "tick": als_int(r[5], 1, signed=True),
-            "staked_L": als_int(r[6]) or 0, "L": als_int(r[7]) or 0,
-            "tickSpacing": als_int(r[8], signed=True), "fee": als_int(r[9]),
+            "pool": p, "gauge": g, "dex": dex["name"], "belohnung": dex["belohnung"],
+            "t0": t0, "t1": t1, "sqrtP": als_int(r[2], 0), "tick": als_int(r[2], 1, signed=True),
+            "staked_L": als_int(r[3]) or 0, "tickSpacing": als_int(r[4], signed=True),
+            "fee": als_int(r[5]), "rate": rate, "gemessen_bis": zeit,
         })
     return farmen
 
 
-def bestaende(chain, farmen):
-    aufr = []
+def bestaende_uebernehmen(farmen, markt):
+    m = {x["pool"]: x for x in markt}
     for f in farmen:
-        aufr += [(f["t0"], aufruf(S["balanceOf"], f["pool"])),
-                 (f["t1"], aufruf(S["balanceOf"], f["pool"]))]
-    res = _m(chain, aufr)
-    for i, f in enumerate(farmen):
-        f["b0"] = als_int(res[2 * i]) or 0
-        f["b1"] = als_int(res[2 * i + 1]) or 0
+        x = m.get(f["pool"], {})
+        f["b0"], f["b1"] = x.get("b0", 0), x.get("b1", 0)
 
 
 # ---------- Preise aus den Pools selbst ----------
 
-def preise_ableiten(farmen, tokens, dollar, min_tiefe_usd=5000):
+def preise_ableiten(markt, tokens, dollar, min_tiefe_usd=5000):
     """Dollar-Token = 1 $. Andere Token bekommen den Preis aus dem Pool, in dem
     die Gegenseite am meisten bekannten Wert hat (Schutz gegen Mini-Pools)."""
     preis = {a: 1.0 for a in dollar}
+    tiefe_von = {}
     for _ in range(4):
         beste = {}
-        for f in farmen:
+        for f in markt:
             if not f["sqrtP"]:
                 continue
             d0, d1 = tokens[f["t0"]]["d"], tokens[f["t1"]]["d"]
@@ -129,20 +157,21 @@ def preise_ableiten(farmen, tokens, dollar, min_tiefe_usd=5000):
                         beste[unbekannt] = (tiefe, faktor * preis[bekannt])
         if not beste:
             break
-        for t, (_, p) in beste.items():
+        for t, (tiefe, p) in beste.items():
             preis[t] = p
-    return preis
+            tiefe_von[t] = tiefe
+    return preis, tiefe_von
 
 
 # ---------- Rechnung fuer die eigene Position ----------
 
-def eigene_position(f, tokens, preis, wert_usd, breite_prozent):
-    """Was bekommt eine eigene Position mit wert_usd bei ±breite_prozent?"""
-    if f["belohnung"] not in preis or f["t0"] not in preis or f["t1"] not in preis:
+def meine_liquiditaet(f, tokens, preis, wert_usd, breite_prozent):
+    """Liquiditaet L einer eigenen Position mit wert_usd bei ±breite_prozent,
+    Grenzen auf das Tick-Raster des Pools gelegt (wie eine echte Position)."""
+    if f["t0"] not in preis or f["t1"] not in preis or not f["sqrtP"]:
         return None
     w = breite_prozent / 100
     s = f["sqrtP"] / Q96
-    # Grenzen auf das Tick-Raster des Pools legen, so wie eine echte Position sie hat
     ts = f.get("tickSpacing") or 1
     t = f.get("tick")
     if t is not None and ts > 0:
@@ -154,12 +183,19 @@ def eigene_position(f, tokens, preis, wert_usd, breite_prozent):
     d0, d1 = tokens[f["t0"]]["d"], tokens[f["t1"]]["d"]
     usd_je_L = ((1 / s - 1 / sb) / 10 ** d0 * preis[f["t0"]]
                 + (s - sa) / 10 ** d1 * preis[f["t1"]])
-    if usd_je_L <= 0:
+    return wert_usd / usd_je_L if usd_je_L > 0 else None
+
+
+def eigene_position(f, tokens, preis, wert_usd, breite_prozent):
+    rt = f["belohnung"]
+    if f["rate"] is None or rt not in preis:
         return None
-    L = wert_usd / usd_je_L
-    anteil = L / (f["staked_L"] + L)
-    dr = tokens[f["belohnung"]]["d"]
-    jahr_usd = f["rate"] / 10 ** dr * preis[f["belohnung"]] * JAHR * anteil if f["laeuft"] else 0
+    L = meine_liquiditaet(f, tokens, preis, wert_usd, breite_prozent)
+    if not L:
+        return None
+    # eigene Liquiditaet verduennt die anderen: Rate je L sinkt um staked/(staked+L)
+    verduennung = f["staked_L"] / (f["staked_L"] + L) if f["staked_L"] else 1
+    jahr_usd = f["rate"] * verduennung * L / 10 ** tokens[rt]["d"] * preis[rt] * JAHR
     return {"apr": jahr_usd / wert_usd * 100, "tag_usd": jahr_usd / 365}
 
 
@@ -174,61 +210,61 @@ def scannen(konfig, cache, verlauf):
         chain = Chain(name, cfg["rpc"], cfg["id"])
         for dex in cfg["dexe"]:
             eintrag = {"chain": name, "dex": dex["name"], "typ": dex["typ"]}
-            if dex["typ"] != "slipstream":
+            if dex["typ"] != "cl_wachstum":
                 eintrag["stand"] = "noch nicht angebunden"
                 status.append(eintrag)
                 continue
             try:
-                voter, anzahl, pools = voter_pools(chain, dex, cache)
-                farmen = farmen_lesen(chain, dex, voter, pools)
-                alle_tokens = sorted({t for f in farmen for t in (f["t0"], f["t1"], f["belohnung"])})
+                fabrik, anzahl, pools, paare = pools_mit_farm(chain, dex, cache)
+                farmen = farmen_lesen(chain, dex, paare, cache)
+                markt = marktdaten(chain, pools)
+                alle_tokens = sorted({t for m in markt for t in (m["t0"], m["t1"])} | {dex["belohnung"]})
                 tokens = token_infos(chain, alle_tokens, cache)
-                bestaende(chain, farmen)
-                preis = preise_ableiten(farmen, tokens, cfg["dollar"])
+                bestaende_uebernehmen(farmen, markt)
+                preis, tiefe = preise_ableiten(markt, tokens, cfg["dollar"])
             except RPCFehler as e:
                 eintrag["stand"] = f"Fehler: {str(e)[:160]}"
                 status.append(eintrag)
                 continue
 
-            # Regel 2: Liquiditaet des Belohnungs-Tokens gegen seine Tagesausschuettung
-            emission_tag, liq = {}, {}
-            for f in farmen:
-                rt = f["belohnung"]
-                if f["laeuft"] and rt in preis:
-                    emission_tag[rt] = emission_tag.get(rt, 0) + \
-                        f["rate"] * 86400 / 10 ** tokens[rt]["d"] * preis[rt]
-                for t, b in ((f["t0"], f["b0"]), (f["t1"], f["b1"])):
-                    if t == rt and t in preis:
-                        liq[t] = liq.get(t, 0) + b / 10 ** tokens[t]["d"] * preis[t]
+            rt = dex["belohnung"]
+            # Regel 2: Liquiditaet des Belohnungs-Tokens auf dieser Chain (alle Pools des DEX)
+            # gegen seine gemessene Tagesausschuettung
+            emission_tag = sum(f["rate"] * f["staked_L"] * 86400 / 10 ** tokens[rt]["d"] * preis[rt]
+                               for f in farmen if f["rate"] and rt in preis)
+            liq_rt = sum(b / 10 ** tokens[rt]["d"] * preis[rt]
+                         for m in markt if rt in preis
+                         for t, b in ((m["t0"], m["b0"]), (m["t1"], m["b1"])) if t == rt)
 
             # eigener Preisverlauf fuer Regel 4 (Belohnung −30 % in 24 h)
-            for rt in emission_tag:
+            if rt in preis:
                 schl = f"{name}:{rt}"
                 reihe = verlauf.setdefault(schl, [])
                 reihe.append([jetzt, round(preis[rt], 10)])
                 verlauf[schl] = [x for x in reihe if x[0] > jetzt - 8 * 86400]
+            ver = verlauf.get(f"{name}:{rt}", [])
+            alt = [p for t, p in ver if t <= jetzt - 23 * 3600]
+            aend24 = (preis[rt] / alt[-1] - 1) * 100 if alt and rt in preis else None
 
-            laufende = 0
+            laufende = gemessen = 0
             for f in farmen:
-                if not f["laeuft"]:
-                    continue
+                if f["rate"] is not None:
+                    gemessen += 1
+                if not f["rate"]:
+                    continue  # (noch) keine gemessene Ausschuettung
                 laufende += 1
                 tvl = sum(b / 10 ** tokens[t]["d"] * preis.get(t, 0)
                           for t, b in ((f["t0"], f["b0"]), (f["t1"], f["b1"])))
                 pos = {str(b): eigene_position(f, tokens, preis, wert, b)
                        for b in konfig["bereiche_prozent"]}
-                rt = f["belohnung"]
-                ver = verlauf.get(f"{name}:{rt}", [])
-                alt = [p for t, p in ver if t <= jetzt - 23 * 3600]
-                aend24 = (preis[rt] / alt[-1] - 1) * 100 if alt and rt in preis else None
                 gebuehr = (f["fee"] or 0) / 10000
                 p2 = pos.get("2")
                 pruef = {
                     "gebuehr_ok": gebuehr <= regeln["max_poolgebuehr_prozent"],
                     "belohnung_nicht_im_paar": rt not in (f["t0"], f["t1"]),
                     "apr_ok": bool(p2 and p2["apr"] >= regeln["min_apr_prozent"]),
-                    "liquiditaet_ok": emission_tag.get(rt, 0) > 0 and liq.get(rt, 0) >=
-                        regeln["min_liquiditaet_faktor_emission"] * emission_tag[rt],
+                    "liquiditaet_ok": emission_tag > 0 and liq_rt >=
+                        regeln["min_liquiditaet_faktor_emission"] * emission_tag,
                     "tvl_ok": tvl >= regeln["min_pool_tvl_usd"],
                     "preis_ok": aend24 is None or aend24 > -regeln["max_tagesminus_belohnung_prozent"],
                     "preis_bekannt": rt in preis and f["t0"] in preis and f["t1"] in preis,
@@ -240,17 +276,23 @@ def scannen(konfig, cache, verlauf):
                     "belohnung_preis": preis.get(rt),
                     "belohnung_24h_prozent": None if aend24 is None else round(aend24, 1),
                     "gebuehr_prozent": gebuehr, "tvl_usd": round(tvl),
-                    "ausschuettung_tag_usd": round(f["rate"] * 86400 / 10 ** tokens[rt]["d"]
-                                                   * preis.get(rt, 0), 2),
+                    "ausschuettung_tag_usd": round(f["rate"] * f["staked_L"] * 86400
+                                                   / 10 ** tokens[rt]["d"] * preis.get(rt, 0), 2),
                     "mein_apr": {b: (None if v is None else round(v["apr"], 1)) for b, v in pos.items()},
                     "mein_ertrag_tag_usd": {b: (None if v is None else round(v["tag_usd"], 3))
                                             for b, v in pos.items()},
                     "pruefung": pruef,
                     "alle_regeln_ok": all(pruef.values()),
-                    "belohnung_endet": f["ende"],
+                    "gemessen_bis": f["gemessen_bis"],
                 })
-            eintrag.update({"stand": "ok", "voter": voter, "pools_gesamt": anzahl,
-                            "laufende_farmen": laufende, "abfragen": chain.abfragen})
+            eintrag.update({"stand": "ok", "factory": fabrik, "pools_gesamt": anzahl,
+                            "pools_mit_farm": len(paare), "gemessen": gemessen,
+                            "laufende_farmen": laufende,
+                            "belohnung": tokens[rt]["s"],
+                            "belohnung_preis": preis.get(rt),
+                            "belohnung_liquiditaet_usd": round(liq_rt),
+                            "ausschuettung_tag_usd": round(emission_tag),
+                            "abfragen": chain.abfragen})
             status.append(eintrag)
     ergebnis.sort(key=lambda e: -(e["mein_apr"].get("2") or 0))
     return {"zeit": jetzt, "position_usd": wert, "farmen": ergebnis, "dexe": status}

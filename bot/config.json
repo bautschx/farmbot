@@ -1,7 +1,10 @@
 {
-  "_hinweis": "Adressen am 27.10.2026 ueber Chain-Daten geprueft. 'seed_gauges' sind je DEX ein bekannter Gauge; daraus findet der Bot Voter, Pools und alle weiteren Gauges selbst.",
+  "_hinweis": "Adressen am 27.10.2026 ueber Chain-Daten geprueft. seed_pool: ein bekannter Pool je DEX; daraus findet der Bot Factory, alle Pools und alle Farmen selbst. belohnung: Token, in dem die Farmen dieses DEX auf dieser Chain auszahlen.",
   "position_usd": 100,
-  "bereiche_prozent": [2, 4],
+  "bereiche_prozent": [
+    2,
+    4
+  ],
   "regeln": {
     "max_poolgebuehr_prozent": 0.3,
     "min_apr_prozent": 200,
@@ -13,51 +16,134 @@
   "chains": {
     "Base": {
       "id": 8453,
-      "rpc": ["https://mainnet.base.org", "https://base-rpc.publicnode.com"],
-      "dollar": {"0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": "USDC"},
+      "rpc": [
+        "https://mainnet.base.org",
+        "https://base-rpc.publicnode.com"
+      ],
+      "dollar": {
+        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": "USDC"
+      },
       "gas_token": "0x4200000000000000000000000000000000000006",
-      "dexe": [{"name": "Aero", "typ": "slipstream", "seed_gauge": "0x9f4594cc94c373141242fa2ca199c5f78e1662e5"}]
+      "dexe": [
+        {
+          "name": "Aero",
+          "typ": "cl_wachstum",
+          "seed_pool": "0x868eed6bad4bd368cd053b766f84cc727697589a",
+          "belohnung": "0x3f5bf3edac59d650d8fdf9657a71f2f904a3a4ee"
+        }
+      ]
     },
     "OP Mainnet": {
       "id": 10,
-      "rpc": ["https://mainnet.optimism.io", "https://optimism-rpc.publicnode.com"],
-      "dollar": {"0x0b2c639c533813f4aa9d7837caf62653d097ff85": "USDC", "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58": "USDT"},
+      "rpc": [
+        "https://mainnet.optimism.io",
+        "https://optimism-rpc.publicnode.com"
+      ],
+      "dollar": {
+        "0x0b2c639c533813f4aa9d7837caf62653d097ff85": "USDC",
+        "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58": "USDT"
+      },
       "gas_token": "0x4200000000000000000000000000000000000006",
-      "dexe": [{"name": "Aero", "typ": "slipstream", "seed_gauge": "0x8f6a9ea8304fe2c16a6a11f31aba71f2c526cfd9"}]
+      "dexe": [
+        {
+          "name": "Aero",
+          "typ": "cl_wachstum",
+          "seed_pool": "0xca231d91ec00385a54e541f504617d2197f9b7c3",
+          "belohnung": "0xbdeaea5205d16f34cb40038052d91235d87b4c54"
+        }
+      ]
     },
     "Arbitrum": {
       "id": 42161,
-      "rpc": ["https://arb1.arbitrum.io/rpc", "https://arbitrum.drpc.org"],
-      "dollar": {"0xaf88d065e77c8cc2239327c5edb3a432268e5831": "USDC", "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9": "USDT0"},
+      "rpc": [
+        "https://arb1.arbitrum.io/rpc",
+        "https://arbitrum.drpc.org"
+      ],
+      "dollar": {
+        "0xaf88d065e77c8cc2239327c5edb3a432268e5831": "USDC",
+        "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9": "USDT0"
+      },
       "gas_token": "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
-      "dexe": [{"name": "Aero", "typ": "slipstream", "seed_gauge": "0x9eac666361c4c9989ab2a865d9320f16cb627094"}]
+      "dexe": [
+        {
+          "name": "Aero",
+          "typ": "cl_wachstum",
+          "seed_pool": "0x6938f149a2b1ca7f4737109ab7d0df0c50b69087",
+          "belohnung": "0x436a085b2751cb87db270ffa66f8d698f87bec82"
+        }
+      ]
     },
     "Robinhood": {
       "id": 4663,
-      "rpc": ["https://rpc.mainnet.chain.robinhood.com"],
-      "dollar": {"0x5fc5360d0400a0fd4f2af552add042d716f1d168": "USDG"},
+      "rpc": [
+        "https://rpc.mainnet.chain.robinhood.com"
+      ],
+      "dollar": {
+        "0x5fc5360d0400a0fd4f2af552add042d716f1d168": "USDG"
+      },
       "gas_token": "0x0bd7d308f8e1639fab988df18a8011f41eacad73",
       "dexe": [
-        {"name": "Aero", "typ": "slipstream", "seed_gauge": "0xe033f4bd3d7ccf537a2f954ecdc8eb1218e3b7a6"},
-        {"name": "Up33", "typ": "slipstream", "seed_gauge": "0x9eead18cf127923f87d1caea33f28ea0469f48cf"}
+        {
+          "name": "Aero",
+          "typ": "cl_wachstum",
+          "seed_pool": "0x7615926023bb149f36095645c2a81dc367d39750",
+          "belohnung": "0x9e148c5716b5aadcfd3b71ceae9ee7a9e22c29e2"
+        },
+        {
+          "name": "Up33",
+          "typ": "cl_wachstum",
+          "seed_pool": "0x2f393b60ef0cfaf669af63284e5592dc3a657b73",
+          "belohnung": "0x57c0e45cb534413d1c20a4240955d6bb250bb4f1"
+        }
       ]
     },
     "Avalanche": {
       "id": 43114,
-      "rpc": ["https://avalanche-c-chain-rpc.publicnode.com", "https://api.avax.network/ext/bc/C/rpc", "https://avalanche.drpc.org"],
-      "dollar": {"0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e": "USDC", "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7": "USDt"},
+      "rpc": [
+        "https://avalanche-c-chain-rpc.publicnode.com",
+        "https://api.avax.network/ext/bc/C/rpc",
+        "https://avalanche.drpc.org"
+      ],
+      "dollar": {
+        "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e": "USDC",
+        "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7": "USDt"
+      },
       "gas_token": "0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7",
       "dexe": [
-        {"name": "Pharaoh", "typ": "slipstream", "seed_gauge": "0x4543922018006b46fe7dab001669f38d4e22c728"},
-        {"name": "Blackhole", "typ": "algebra", "seed_gauge": "0x3ade52f9779c07471f4b6d5997444c3c2124c1c0"}
+        {
+          "name": "Pharaoh",
+          "typ": "ramses_v3",
+          "seed_pool": "0xf01449c0ba930b6e2caca3def3ccbd7a3e589534",
+          "belohnung": "0x13a466998ce03db73abc2d4df3bbd845ed1f28e7"
+        },
+        {
+          "name": "Blackhole",
+          "typ": "algebra",
+          "seed_pool": "0x41100c6d2c6920b10d12cd8d59c8a9aa2ef56fc7",
+          "belohnung": "0xcd94a87696fac69edae3a70fe5725307ae1c43f6"
+        }
       ]
     },
     "BNB Chain": {
       "id": 56,
-      "rpc": ["https://bsc-rpc.publicnode.com", "https://bsc.drpc.org", "https://1rpc.io/bnb"],
-      "dollar": {"0x55d398326f99059ff775485246999027b3197955": "USDT", "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": "USDC"},
+      "rpc": [
+        "https://bsc-rpc.publicnode.com",
+        "https://bsc.drpc.org",
+        "https://1rpc.io/bnb"
+      ],
+      "dollar": {
+        "0x55d398326f99059ff775485246999027b3197955": "USDT",
+        "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": "USDC"
+      },
       "gas_token": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
-      "dexe": [{"name": "PancakeSwap", "typ": "pancake_masterchef", "seed_gauge": "0x556b9306565093c855aea9ae92a594704c2cd59e"}]
+      "dexe": [
+        {
+          "name": "PancakeSwap",
+          "typ": "pancake_masterchef",
+          "seed_pool": "0x172fcd41e0913e95784454622d1c3724f546f849",
+          "belohnung": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82"
+        }
+      ]
     }
   }
 }

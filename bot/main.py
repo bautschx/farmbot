@@ -62,31 +62,20 @@ def diagnose(konfig):
         except RPCFehler as e:
             print("  Multicall3: FEHLER", str(e)[:120])
         for dex in cfg["dexe"]:
-            g = dex["seed_gauge"]
-            print(f"  -- {dex['name']} ({dex['typ']}) Gauge {g}")
-            werte = {}
-            for f in ("voter", "pool", "nft", "rewardToken", "rewardRate", "periodFinish"):
+            p = dex["seed_pool"]
+            print(f"  -- {dex['name']} ({dex['typ']}) Pool {p}")
+            for f in ("factory", "gauge", "stakedLiquidity", "fee", "tickSpacing",
+                      "rewardGrowthGlobalX128", "lastUpdated"):
                 try:
-                    r = chain.call(g, aufruf(S[f]))
-                    werte[f] = r
-                    zeig = als_adr(r) if f in ("voter", "pool", "nft", "rewardToken") else als_int(r)
+                    r = chain.call(p, aufruf(S[f]))
+                    zeig = als_adr(r) if f in ("factory", "gauge") else \
+                        ("vorhanden" if f == "rewardGrowthGlobalX128" else als_int(r, 0, signed=(f == "tickSpacing")))
                     print(f"     {f}: {zeig}")
+                    if f == "factory":
+                        n = als_int(chain.call(als_adr(r), aufruf(S["allPoolsLength"])))
+                        print(f"     factory.allPoolsLength: {n}")
                 except RPCFehler as e:
                     print(f"     {f}: FEHLER {str(e)[:100]}")
-            if "voter" in werte:
-                v = als_adr(werte["voter"])
-                try:
-                    print("     voter.length:", als_int(chain.call(v, aufruf(S["length"]))))
-                except RPCFehler as e:
-                    print("     voter.length: FEHLER", str(e)[:100])
-            if "pool" in werte:
-                p = als_adr(werte["pool"])
-                for f in ("slot0", "stakedLiquidity", "fee", "tickSpacing"):
-                    try:
-                        r = chain.call(p, aufruf(S[f]))
-                        print(f"     pool.{f}: {als_int(r, 0, signed=(f == 'tickSpacing'))}")
-                    except RPCFehler as e:
-                        print(f"     pool.{f}: FEHLER {str(e)[:100]}")
 
 
 def scan(konfig):
