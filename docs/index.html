@@ -73,7 +73,7 @@ h2{font-size:17px;margin:28px 0 10px}
 
 <script>
 const EXPLORER = {"Base":"https://basescan.org/address/","OP Mainnet":"https://optimistic.etherscan.io/address/","Arbitrum":"https://arbiscan.io/address/","BNB Chain":"https://bscscan.com/address/","Avalanche":"https://snowtrace.io/address/"};
-const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 200 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt",paar_ruhig:"Paar ruhig (24 h)"};
+const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 200 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt",paar_ruhig:"Paar ruhig (24 h)",auszahlung_sicher:"Auszahlung nicht einbehaltbar"};
 let daten = null;
 const $ = id => document.getElementById(id);
 const usd = (x, n=0) => x == null ? "–" : x.toLocaleString("de-AT",{minimumFractionDigits:n,maximumFractionDigits:n}) + " $";
@@ -107,7 +107,7 @@ function zeichne(){
   const dx = $("dexe"); dx.innerHTML = "";
   for(const d of daten.dexe){
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${d.chain}</td><td>${d.dex}</td><td>${d.stand==="ok"?'<span class="marke ok">läuft</span>':`<span class="marke nein">${d.stand}</span>`}</td>
+    tr.innerHTML = `<td>${d.chain}</td><td>${d.dex}${d.hinweis?'<br><span class="klein" style="white-space:normal;display:inline-block;max-width:260px">⚠ '+d.hinweis+'</span>':''}</td><td>${d.stand==="ok"?'<span class="marke ok">läuft</span>':`<span class="marke nein">${d.stand}</span>`}</td>
       <td class="zahl">${d.pools_gesamt??"–"}</td><td class="zahl">${d.pools_mit_farm??"–"}</td>
       <td class="zahl">${d.gemessen??"–"}</td>
       <td>${d.belohnung??"–"}${d.belohnung_preis!=null?'<br><span class="klein">'+d.belohnung_preis.toPrecision(4)+' $</span>':''}</td>
