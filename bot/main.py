@@ -33,17 +33,23 @@ def speichern(pfad, inhalt):
 
 
 def telegram(text):
+    """Schickt eine Nachricht. Rueckgabe True, wenn Telegram sie angenommen hat."""
     token, chat = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
     if not token or not chat:
-        return
+        print("Telegram: Geheimnisse fehlen")
+        return False
     daten = json.dumps({"chat_id": chat, "text": text, "parse_mode": "HTML",
                         "disable_web_page_preview": True}).encode()
     req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=daten,
                                  headers={"content-type": "application/json"})
     try:
-        urllib.request.urlopen(req, timeout=20)
+        with urllib.request.urlopen(req, timeout=20) as r:
+            ok = json.loads(r.read()).get("ok", False)
+        print("Telegram:", "gesendet" if ok else "abgelehnt")
+        return ok
     except Exception as e:
         print("Telegram fehlgeschlagen:", e)
+        return False
 
 
 def diagnose(konfig):
@@ -87,14 +93,21 @@ def scan(konfig):
     speichern(os.path.join(DATEN, "farmen.json"), daten)
     speichern(os.path.join(DATEN, "verlauf.json"), verlauf)
 
-    # neue Farmen, die alle Regeln erfuellen, einmal melden
+    # neue Farmen, die alle Regeln erfuellen, einmal melden (eine Sammelnachricht je Lauf).
+    # Version 2: Meldeliste neu, weil die ersten Laeufe ein zu kurzes Messfenster hatten.
+    if cache.get("gemeldet_version") != 2:
+        cache["gemeldet"], cache["gemeldet_version"] = [], 2
     gemeldet = set(cache.get("gemeldet", []))
-    for f in daten["farmen"]:
-        if f["alle_regeln_ok"] and f["gauge"] not in gemeldet:
-            gemeldet.add(f["gauge"])
-            telegram(f"🌾 <b>Neue Farm besteht alle Regeln</b>\n{f['chain']} · {f['dex']} · {f['paar']}\n"
-                     f"Belohnung {f['belohnung']}, dein APR bei ±2 %: {f['mein_apr'].get('2')} %\n"
-                     f"Pool {f['pool']}")
+    neu = [f for f in daten["farmen"] if f["alle_regeln_ok"] and f["gauge"] not in gemeldet]
+    if neu:
+        zeilen = [f"• {f['chain']} · {f['dex']} · <b>{f['paar']}</b>: {f['mein_apr'].get('2')} % "
+                  f"(±2 %), {f['mein_ertrag_tag_usd'].get('2')} $/Tag, Belohnung {f['belohnung']}"
+                  for f in neu[:10]]
+        mehr = f"\n… und {len(neu) - 10} weitere" if len(neu) > 10 else ""
+        text = (f"🌾 <b>{len(neu)} neue Farm(en) bestehen alle Regeln</b>\n" + "\n".join(zeilen) + mehr +
+                "\n\nDashboard: https://bautschx.github.io/farmbot/")
+        if telegram(text):
+            gemeldet.update(f["gauge"] for f in neu)
     cache["gemeldet"] = sorted(gemeldet)
     speichern(os.path.join(HIER, "cache.json"), cache)
 
@@ -109,5 +122,9 @@ if __name__ == "__main__":
     modus = sys.argv[1] if len(sys.argv) > 1 else "scan"
     if modus == "diagnose":
         diagnose(konfig)
+    elif modus == "telegramtest":
+        ok = telegram("✅ <b>Farmbot ist verbunden.</b>\nAb jetzt kommen hier Meldungen zu neuen Farmen, "
+                      "die alle deine Regeln bestehen.\nDashboard: https://bautschx.github.io/farmbot/")
+        sys.exit(0 if ok else 1)
     else:
         scan(konfig)
