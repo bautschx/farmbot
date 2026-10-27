@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       modus:
-        description: "scan oder diagnose"
+        description: "scan, diagnose oder telegramtest"
         type: choice
-        options: [scan, diagnose]
+        options: [scan, diagnose, telegramtest]
         default: scan
 
 permissions:
