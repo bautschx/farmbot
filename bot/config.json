@@ -119,8 +119,9 @@
         {
           "name": "Blackhole",
           "typ": "algebra",
-          "seed_pool": "0x41100c6d2c6920b10d12cd8d59c8a9aa2ef56fc7",
-          "belohnung": "0xcd94a87696fac69edae3a70fe5725307ae1c43f6"
+          "seed_pool": "0x7789fa308147eae364e3bcfa35351f2b9e0bd012",
+          "belohnung": "0xcd94a87696fac69edae3a70fe5725307ae1c43f6",
+          "seed_gauge": "0x885bbed6f89bd617bdc29d75722d3a19010b4184"
         }
       ]
     },

@@ -23,7 +23,11 @@ S = {  # Funktions-Selektoren (keccak256, erste 4 Bytes), am 27.10.2026 berechne
     # fuer die Diagnose aelterer Vertraege
     "voter": "46c96aac", "nft": "47ccca02", "pool": "16f0115b",
     "rewardToken": "f7c618c1", "rewardRate": "7b0a47ee", "periodFinish": "ebe2b12b",
-    "length": "1f7b6d32",
+    "length": "1f7b6d32", "pools": "ac4afa38", "gauges": "b9a09fd5",
+    # Algebra (Blackhole): Voter, Pool-Plugin, virtueller Farm-Pool
+    "DISTRIBUTION": "7c91e4eb", "globalState": "e76c01e4", "plugin": "ef01df4f",
+    "incentive": "1d4632ac", "currentLiquidity": "46caf2ae", "rewardRates": "a88a5c16",
+    "rewardReserves": "f0de8228", "getReserves": "0902f1ac",
 }
 Q96 = 2 ** 96
 Q128 = 2 ** 128
@@ -63,20 +67,26 @@ def pools_mit_farm(chain, dex, cache):
     return fabrik, anzahl, pools, paare
 
 
-def marktdaten(chain, pools):
-    """Kurs und Bestaende aller Pools, fuer Preise und die Liquiditaet (Regel 2)."""
+def marktdaten(chain, pools, kurs="slot0"):
+    """Kurs und Bestaende aller Pools, fuer Preise und die Liquiditaet (Regel 2).
+    kurs: slot0 (Uniswap-Bauart) oder globalState (Algebra); beide liefern zuerst sqrtPriceX96.
+    Klassische Paare ohne diesen Kurs (z. B. Blackhole-Basispaare) werden ueber getReserves gelesen."""
     aufr = []
     for p, t0, t1 in pools:
-        aufr += [(p, aufruf(S["slot0"])), (t0, aufruf(S["balanceOf"], p)),
-                 (t1, aufruf(S["balanceOf"], p))]
+        aufr += [(p, aufruf(S[kurs])), (t0, aufruf(S["balanceOf"], p)),
+                 (t1, aufruf(S["balanceOf"], p)), (p, aufruf(S["getReserves"]))]
     res = _m(chain, aufr)
     markt = []
     for i, (p, t0, t1) in enumerate(pools):
-        sq = als_int(res[3 * i], 0)
+        sq = als_int(res[4 * i], 0)
+        b0, b1 = als_int(res[4 * i + 1]) or 0, als_int(res[4 * i + 2]) or 0
         if not sq:
-            continue
-        markt.append({"pool": p, "t0": t0, "t1": t1, "sqrtP": sq,
-                      "b0": als_int(res[3 * i + 1]) or 0, "b1": als_int(res[3 * i + 2]) or 0})
+            r0, r1 = als_int(res[4 * i + 3], 0), als_int(res[4 * i + 3], 1)
+            if not r0 or not r1:
+                continue
+            sq = int(math.sqrt(r1 / r0) * Q96)
+            b0, b1 = r0, r1
+        markt.append({"pool": p, "t0": t0, "t1": t1, "sqrtP": sq, "b0": b0, "b1": b1})
     return markt
 
 
@@ -125,6 +135,68 @@ def farmen_lesen(chain, dex, paare, cache):
             "fee": als_int(r[5]), "rate": rate, "gemessen_bis": zeit,
         })
     return farmen
+
+
+def algebra_lesen(chain, dex, cache):
+    """Blackhole (Algebra): Pools ueber den Voter, Farm ueber Pool -> Plugin -> virtueller Pool.
+    Die Ausschuettung kommt direkt aus dem Vertrag (rewardRates), solange Vorrat da ist.
+    Am 27.10.2026 geprueft: Vertragsrate 0,704 BLACK/s, eigene Messung ueber den
+    Belohnungszaehler 0,699 BLACK/s."""
+    c = cache.setdefault("dex", {}).setdefault(f"{chain.name}|{dex['name']}", {})
+    if not c.get("voter"):
+        c["voter"] = als_adr(chain.call(dex["seed_gauge"], aufruf(S["DISTRIBUTION"])))
+    voter = c["voter"]
+    anzahl = als_int(chain.call(voter, aufruf(S["length"])))
+    bekannt = c.setdefault("pools", [])
+    neu = [als_adr(r) for r in _m(chain, [(voter, aufruf(S["pools"], i))
+                                          for i in range(len(bekannt), anzahl)])]
+    tok = _m(chain, [(p, aufruf(S[f])) for p in neu if p for f in ("token0", "token1")])
+    j = 0
+    for p in neu:
+        if not p:
+            bekannt.append([None, None, None])
+            continue
+        bekannt.append([p, als_adr(tok[j]), als_adr(tok[j + 1])])
+        j += 2
+    pools = [b for b in bekannt if b[0] and b[1] and b[2]]
+    # Gauge und virtueller Farm-Pool je Pool
+    g_res = _m(chain, [(voter, aufruf(S["gauges"], b[0])) for b in pools])
+    pl_res = _m(chain, [(b[0], aufruf(S["plugin"])) for b in pools])
+    plugins = [als_adr(r) for r in pl_res]
+    vp_res = _m(chain, [(pl, aufruf(S["incentive"])) for pl in plugins if pl and pl != NULL])
+    vps, k = [], 0
+    for pl in plugins:
+        if pl and pl != NULL:
+            vps.append(als_adr(vp_res[k]))
+            k += 1
+        else:
+            vps.append(None)
+    kandidaten = [(b, als_adr(g), vp) for b, g, vp in zip(pools, g_res, vps)
+                  if g and als_adr(g) != NULL and vp and vp != NULL]
+    felder_p = ["globalState", "tickSpacing"]
+    felder_v = ["currentLiquidity", "rewardRates", "rewardReserves"]
+    aufr = []
+    for b, g, vp in kandidaten:
+        aufr += [(b[0], aufruf(S[f])) for f in felder_p] + [(vp, aufruf(S[f])) for f in felder_v]
+    res = _m(chain, aufr)
+    farmen = []
+    for i, (b, g, vp) in enumerate(kandidaten):
+        r = res[i * 5:(i + 1) * 5]
+        if r[0] is None or r[2] is None or r[3] is None:
+            continue
+        cl = als_int(r[2]) or 0
+        rate_ges = als_int(r[3], 0) or 0
+        vorrat = als_int(r[4], 0) if r[4] else None
+        laeuft = rate_ges > 0 and cl > 0 and (vorrat is None or vorrat > 0)
+        farmen.append({
+            "pool": b[0], "gauge": g, "dex": dex["name"], "belohnung": dex["belohnung"],
+            "t0": b[1], "t1": b[2], "sqrtP": als_int(r[0], 0), "tick": als_int(r[0], 1, signed=True),
+            "staked_L": cl, "tickSpacing": als_int(r[1], signed=True),
+            "fee": als_int(r[0], 2),  # lastFee in Millionsteln, gleiche Einheit wie Uniswap fee
+            "rate": (rate_ges / cl) if laeuft else 0.0,
+            "vorrat": vorrat, "gemessen_bis": int(time.time()),
+        })
+    return voter, anzahl, pools, farmen
 
 
 def bestaende_uebernehmen(farmen, markt):
@@ -212,14 +284,19 @@ def scannen(konfig, cache, verlauf):
         chain = Chain(name, cfg["rpc"], cfg["id"])
         for dex in cfg["dexe"]:
             eintrag = {"chain": name, "dex": dex["name"], "typ": dex["typ"]}
-            if dex["typ"] != "cl_wachstum":
+            if dex["typ"] not in ("cl_wachstum", "algebra"):
                 eintrag["stand"] = "noch nicht angebunden"
                 status.append(eintrag)
                 continue
             try:
-                fabrik, anzahl, pools, paare = pools_mit_farm(chain, dex, cache)
-                farmen = farmen_lesen(chain, dex, paare, cache)
-                markt = marktdaten(chain, pools)
+                if dex["typ"] == "algebra":
+                    fabrik, anzahl, pools, farmen = algebra_lesen(chain, dex, cache)
+                    markt = marktdaten(chain, pools, "globalState")
+                    paare = farmen
+                else:
+                    fabrik, anzahl, pools, paare = pools_mit_farm(chain, dex, cache)
+                    farmen = farmen_lesen(chain, dex, paare, cache)
+                    markt = marktdaten(chain, pools)
                 alle_tokens = sorted({t for m in markt for t in (m["t0"], m["t1"])} | {dex["belohnung"]})
                 tokens = token_infos(chain, alle_tokens, cache)
                 bestaende_uebernehmen(farmen, markt)
