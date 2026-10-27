@@ -452,6 +452,10 @@ def scannen(konfig, cache, verlauf):
     ergebnis, status = [], []
     for name, cfg in konfig["chains"].items():
         chain = Chain(name, cfg["rpc"], cfg["id"])
+        try:  # fuer die Kostenrechnung der Simulation (ohne L1-Datenanteil bei L2-Chains)
+            gaspreis = int(chain.anfrage("eth_gasPrice", []), 16)
+        except (RPCFehler, ValueError, TypeError):
+            gaspreis = None
         for dex in cfg["dexe"]:
             eintrag = {"chain": name, "dex": dex["name"], "typ": dex["typ"]}
             if dex["typ"] not in ("cl_wachstum", "algebra", "ramses_v3", "pancake_masterchef"):
@@ -485,6 +489,8 @@ def scannen(konfig, cache, verlauf):
                 continue
 
             rt = dex["belohnung"]
+            gt = cfg.get("gas_token")
+            gas_usd = gaspreis / 1e18 * preis[gt] if gaspreis and gt in preis else None
             # Regel 2: Liquiditaet des Belohnungs-Tokens auf dieser Chain (alle Pools des DEX)
             # gegen seine gemessene Tagesausschuettung
             emission_tag = sum(f["rate"] * f["staked_L"] * 86400 / 10 ** tokens[rt]["d"] * preis[rt]
@@ -571,6 +577,11 @@ def scannen(konfig, cache, verlauf):
                     "pruefung": pruef,
                     "alle_regeln_ok": all(pruef.values()),
                     "gemessen_bis": f["gemessen_bis"],
+                    # Rohdaten fuer die Simulation (eigene Position mit echten Kursen weiterrechnen)
+                    "sim": {"d0": tokens[f["t0"]]["d"], "d1": tokens[f["t1"]]["d"],
+                            "p0": preis.get(f["t0"]), "p1": preis.get(f["t1"]),
+                            "tick": f["tick"], "ts": f["tickSpacing"], "rate": f["rate"],
+                            "L": f["staked_L"], "rd": tokens[rt]["d"], "gas_usd": gas_usd},
                 })
             eintrag.update({"stand": "ok", "factory": fabrik, "pools_gesamt": anzahl,
                             "pools_mit_farm": len(paare), "gemessen": gemessen,

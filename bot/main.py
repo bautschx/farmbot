@@ -14,6 +14,7 @@ HIER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HIER)
 from rpc import Chain, aufruf, als_int, als_adr, MULTICALL3, RPCFehler  # noqa: E402
 import scanner  # noqa: E402
+import simulation  # noqa: E402
 
 WURZEL = os.path.dirname(HIER)
 DATEN = os.path.join(WURZEL, "docs", "data")
@@ -118,6 +119,16 @@ def scan(konfig):
             gemeldet.update(f["gauge"] for f in neu)
     cache["gemeldet"] = sorted(gemeldet)
     speichern(os.path.join(HIER, "cache.json"), cache)
+
+    # Simulation (Papierhandel) mit den Daten dieses Laufs weiterrechnen
+    if konfig.get("simulation"):
+        pfad = os.path.join(DATEN, "simulation.json")
+        zustand = laden(pfad, {})
+        ereignisse = simulation.laufen(daten, konfig, zustand)
+        speichern(pfad, zustand)
+        if ereignisse:
+            telegram("\n".join(ereignisse) + "\n\nDashboard: https://bautschx.github.io/farmbot/")
+        print("Simulation:", zustand.get("kennzahlen"))
 
     for d in daten["dexe"]:
         print(d)

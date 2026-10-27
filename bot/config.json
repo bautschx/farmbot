@@ -14,6 +14,17 @@
     "max_paar_schwankung_24h_prozent": 30,
     "min_pool_tvl_usd": 20000
   },
+  "simulation": {
+    "_hinweis": "Papierhandel mit echten Chain-Daten. Gas-Einheiten sind Annahmen (noch nicht an echten Transaktionen gemessen), Gaspreis wird je Lauf von der Chain gelesen.",
+    "positionen": 3,
+    "einsatz_usd": 100,
+    "bereich_prozent": 2,
+    "gas_eroeffnen": 600000,
+    "gas_nachziehen": 900000,
+    "gas_schliessen": 400000,
+    "verkauf_belohnung_prozent": 0.3,
+    "sperre_stunden": 24
+  },
   "chains": {
     "Base": {
       "id": 8453,
