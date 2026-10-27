@@ -1,10 +1,7 @@
 {
   "_hinweis": "Adressen am 27.10.2026 ueber Chain-Daten geprueft. seed_pool: ein bekannter Pool je DEX; daraus findet der Bot Factory, alle Pools und alle Farmen selbst. belohnung: Token, in dem die Farmen dieses DEX auf dieser Chain auszahlen.",
   "position_usd": 100,
-  "bereiche_prozent": [
-    2,
-    4
-  ],
+  "bereiche_prozent": [2, 3, 4, 5, 6, 8, 10, 12, 15],
   "regeln": {
     "max_poolgebuehr_prozent": 0.3,
     "min_apr_prozent": 200,
@@ -12,13 +9,14 @@
     "min_liquiditaet_faktor_emission": 10,
     "max_tagesminus_belohnung_prozent": 30,
     "max_paar_schwankung_24h_prozent": 30,
+    "min_bereich_prozent": 2,
+    "bereich_faktor_schwankung": 0.5,
     "min_pool_tvl_usd": 20000
   },
   "simulation": {
     "_hinweis": "Papierhandel mit echten Chain-Daten. Gas-Einheiten sind Annahmen (noch nicht an echten Transaktionen gemessen), Gaspreis wird je Lauf von der Chain gelesen.",
     "positionen": 3,
     "einsatz_usd": 100,
-    "bereich_prozent": 2,
     "gas_eroeffnen": 600000,
     "gas_nachziehen": 900000,
     "gas_schliessen": 400000,

@@ -534,7 +534,6 @@ def scannen(konfig, cache, verlauf):
                 pos = {str(b): eigene_position(f, tokens, preis, wert, b)
                        for b in konfig["bereiche_prozent"]}
                 gebuehr = (f["fee"] or 0) / 10000
-                p2 = pos.get("2")
                 # Schwankung des Paares (Kurs Token0 in Token1) ueber die letzten 24 h, eigener Verlauf
                 schwankung = None
                 if f["t0"] in preis and f["t1"] in preis and preis[f["t1"]] > 0:
@@ -545,10 +544,12 @@ def scannen(konfig, cache, verlauf):
                     tag = [x[1] for x in reihe if x[0] >= jetzt - 24 * 3600]
                     if reihe[0][0] <= jetzt - 23 * 3600 and min(tag) > 0:
                         schwankung = (max(tag) / min(tag) - 1) * 100
+                wahl, mindest = bereich_waehlen(pos, schwankung, regeln)
+                pw = pos.get(str(wahl)) if wahl else None
                 pruef = {
                     "gebuehr_ok": gebuehr <= regeln["max_poolgebuehr_prozent"],
                     "belohnung_nicht_im_paar": rt not in (f["t0"], f["t1"]),
-                    "apr_ok": bool(p2 and p2["apr"] >= regeln["min_apr_prozent"]),
+                    "apr_ok": bool(pw and pw["apr"] >= regeln["min_apr_prozent"]),
                     "liquiditaet_ok": emission_tag > 0 and liq_rt >=
                         regeln["min_liquiditaet_faktor_emission"] * emission_tag,
                     "tvl_ok": tvl >= regeln["min_pool_tvl_usd"],
@@ -571,6 +572,9 @@ def scannen(konfig, cache, verlauf):
                     "ausschuettung_tag_usd": round(f["rate"] * f["staked_L"] * 86400
                                                    / 10 ** tokens[rt]["d"] * preis.get(rt, 0), 2),
                     "messpunkte": messpunkte,
+                    "bereich_prozent": wahl, "bereich_mindest_prozent": round(mindest, 1),
+                    "apr": None if pw is None else round(pw["apr"], 1),
+                    "ertrag_tag_usd": None if pw is None else round(pw["tag_usd"], 3),
                     "mein_apr": {b: (None if v is None else round(v["apr"], 1)) for b, v in pos.items()},
                     "mein_ertrag_tag_usd": {b: (None if v is None else round(v["tag_usd"], 3))
                                             for b, v in pos.items()},
@@ -593,5 +597,28 @@ def scannen(konfig, cache, verlauf):
                             "hinweis": dex.get("einbehalt"),
                             "abfragen": chain.abfragen})
             status.append(eintrag)
-    ergebnis.sort(key=lambda e: -(e["mein_apr"].get("2") or 0))
+    ergebnis.sort(key=lambda e: -(e["apr"] or 0))
     return {"zeit": jetzt, "position_usd": wert, "farmen": ergebnis, "dexe": status}
+
+
+def bereich_waehlen(pos, schwankung, regeln):
+    """Bereich je Farm statt fest ±2 % (Stefans Vorgabe 27.10.2026):
+    - Mindestbreite aus der Bewegung des Paares: ± (24-h-Schwankung x Faktor), nie unter dem Minimum.
+      Ruhige Paare (z. B. ETH/USDC) bleiben eng, volatile bekommen mehr Platz.
+    - Reicht der APR, wird breiter gewaehlt: der breiteste Bereich, der noch das APR-Ziel schafft
+      (weniger Nachziehen, weniger Risiko). Schafft keiner das Ziel, der engste erlaubte.
+    Rueckgabe (gewaehlter Bereich in Prozent oder None, Mindestbreite)."""
+    mindest = max(regeln["min_bereich_prozent"], (schwankung or 0) * regeln["bereich_faktor_schwankung"])
+    erlaubt = sorted(float(b) for b, v in pos.items() if v and float(b) >= mindest - 1e-9)
+    if not erlaubt:
+        return None, mindest
+    ziel = [b for b in erlaubt if pos[_k(b)]["apr"] >= regeln["ziel_apr_prozent"]]
+    return _n(max(ziel) if ziel else erlaubt[0]), mindest
+
+
+def _k(b):
+    return str(int(b)) if float(b).is_integer() else str(b)
+
+
+def _n(b):
+    return int(b) if float(b).is_integer() else b

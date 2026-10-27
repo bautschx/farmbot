@@ -109,8 +109,8 @@ def scan(konfig):
     gemeldet = set(cache.get("gemeldet", []))
     neu = [f for f in daten["farmen"] if f["alle_regeln_ok"] and f["gauge"] not in gemeldet]
     if neu:
-        zeilen = [f"• {f['chain']} · {f['dex']} · <b>{f['paar']}</b>: {f['mein_apr'].get('2')} % "
-                  f"(±2 %), {f['mein_ertrag_tag_usd'].get('2')} $/Tag, Belohnung {f['belohnung']}"
+        zeilen = [f"• {f['chain']} · {f['dex']} · <b>{f['paar']}</b>: {f['apr']} % "
+                  f"(±{f['bereich_prozent']} %), {f['ertrag_tag_usd']} $/Tag, Belohnung {f['belohnung']}"
                   for f in neu[:10]]
         mehr = f"\n… und {len(neu) - 10} weitere" if len(neu) > 10 else ""
         text = (f"🌾 <b>{len(neu)} neue Farm(en) bestehen alle Regeln</b>\n" + "\n".join(zeilen) + mehr +

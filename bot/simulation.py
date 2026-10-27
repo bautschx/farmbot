@@ -60,6 +60,10 @@ def _brauchbar(f):
         and f.get("belohnung_preis") is not None and s["p0"] > 0 and s["p1"] > 0
 
 
+def _k(b):
+    return str(int(b)) if float(b).is_integer() else str(b)
+
+
 def _gas(f, einheiten):
     g = (f.get("sim") or {}).get("gas_usd")
     return g * einheiten if g is not None else 0.0
@@ -70,7 +74,6 @@ def laufen(daten, konfig, zustand):
     e = konfig["simulation"]
     jetzt = daten["zeit"]
     regeln = konfig["regeln"]
-    breite = e["bereich_prozent"]
     zustand.setdefault("start", jetzt)
     offen = zustand.setdefault("offen", [])
     buch = zustand.setdefault("geschlossen", [])
@@ -103,7 +106,7 @@ def laufen(daten, konfig, zustand):
         pos["wert_usd"] = _wert(x0, x1, sim)
         pos["gehalten_usd"] = _wert(pos["start_x0"], pos["start_x1"], sim)  # Startbestaende nur gehalten
         pos["belohnung_usd"] = pos["belohnung_menge"] * f["belohnung_preis"]
-        pos["apr_jetzt"] = f["mein_apr"].get(str(breite))
+        pos["apr_jetzt"] = f["mein_apr"].get(_k(pos["bereich"]))
         pos["letzte"] = {k: sim[k] for k in ("p0", "p1", "d0", "d1")}
         pos["letzter_belohnungspreis"] = f["belohnung_preis"]
 
@@ -117,7 +120,8 @@ def laufen(daten, konfig, zustand):
         elif not p.get("auszahlung_sicher", True):
             grund = "Auszahlung kann einbehalten werden"
         else:
-            pos["apr_schwach"] = pos.get("apr_schwach", 0) + 1 if not p.get("apr_ok") else 0
+            schwach = (pos["apr_jetzt"] or 0) < regeln["min_apr_prozent"]  # APR im Bereich DIESER Position
+            pos["apr_schwach"] = pos.get("apr_schwach", 0) + 1 if schwach else 0
             if pos["apr_schwach"] >= 2:
                 grund = f"APR unter {regeln['min_apr_prozent']} % (2 Läufe)"
         if grund:
@@ -127,12 +131,14 @@ def laufen(daten, konfig, zustand):
                               f"{t['ergebnis_usd']:+.2f} $ nach {t['tage']:.1f} Tagen")
             continue
 
-        # aus dem Bereich: nachziehen (alles auf den aktuellen Kurs neu setzen, Kosten abziehen)
+        # aus dem Bereich: nachziehen (auf den aktuellen Kurs, mit dem jetzt empfohlenen Bereich)
         if not im_bereich:
             kosten = pos["wert_usd"] * 0.5 * f["gebuehr_prozent"] / 100 + _gas(f, e["gas_nachziehen"])
+            breite = f.get("bereich_prozent") or pos["bereich"]
             neu = _eroeffnen(sim, pos["wert_usd"] - kosten, breite)
             if neu:
-                pos.update({"unten": neu["unten"], "oben": neu["oben"], "L": neu["L"], "im_bereich": True})
+                pos.update({"unten": neu["unten"], "oben": neu["oben"], "L": neu["L"], "im_bereich": True,
+                            "bereich": breite})
                 pos["wert_usd"] -= kosten
                 pos["kosten_usd"] += kosten
                 pos["nachgezogen"] += 1
@@ -141,11 +147,12 @@ def laufen(daten, konfig, zustand):
     belegt = {(p["chain"], p["pool"]) for p in offen}
     for k in [k for k, bis in sperre.items() if bis <= jetzt]:
         del sperre[k]
-    kandidaten = [f for f in daten["farmen"] if f["alle_regeln_ok"] and _brauchbar(f)
+    kandidaten = [f for f in daten["farmen"] if f["alle_regeln_ok"] and _brauchbar(f) and f.get("bereich_prozent")
                   and (f["chain"], f["pool"]) not in belegt and f"{f['chain']}|{f['pool']}" not in sperre]
-    kandidaten.sort(key=lambda f: -(f["mein_apr"].get(str(breite)) or 0))
+    kandidaten.sort(key=lambda f: -(f.get("apr") or 0))
     for f in kandidaten[:max(0, e["positionen"] - len(offen))]:
         sim = f["sim"]
+        breite = f["bereich_prozent"]
         kosten = e["einsatz_usd"] * 0.5 * f["gebuehr_prozent"] / 100 + _gas(f, e["gas_eroeffnen"])
         neu = _eroeffnen(sim, e["einsatz_usd"] - kosten, breite)
         if not neu:
@@ -153,13 +160,14 @@ def laufen(daten, konfig, zustand):
         pos = {
             "chain": f["chain"], "dex": f["dex"], "pool": f["pool"], "paar": f["paar"],
             "belohnung": f["belohnung"], "start": jetzt, "zuletzt": jetzt,
-            "einsatz_usd": e["einsatz_usd"], "unten": neu["unten"], "oben": neu["oben"], "L": neu["L"],
+            "einsatz_usd": e["einsatz_usd"], "bereich": breite, "unten": neu["unten"], "oben": neu["oben"], "L": neu["L"],
             "start_x0": neu["x0"], "start_x1": neu["x1"], "im_bereich": True,
             "wert_usd": e["einsatz_usd"] - kosten, "gehalten_usd": e["einsatz_usd"] - kosten,
             "belohnung_menge": 0.0, "belohnung_usd": 0.0, "kosten_usd": kosten, "nachgezogen": 0,
             "zeit_im_bereich_s": 0, "laufzeit_s": 0, "fehlt": 0, "apr_schwach": 0,
-            "apr_start": f["mein_apr"].get(str(breite)), "apr_jetzt": f["mein_apr"].get(str(breite)),
-            "merkmale": {"gebuehr_prozent": f["gebuehr_prozent"], "tvl_usd": f["tvl_usd"],
+            "apr_start": f.get("apr"), "apr_jetzt": f.get("apr"),
+            "merkmale": {"bereich_prozent": breite, "bereich_mindest_prozent": f.get("bereich_mindest_prozent"),
+                         "gebuehr_prozent": f["gebuehr_prozent"], "tvl_usd": f["tvl_usd"],
                          "paar_schwankung_24h_prozent": f.get("paar_schwankung_24h_prozent"),
                          "belohnung_24h_prozent": f.get("belohnung_24h_prozent"),
                          "messpunkte": f.get("messpunkte")},
@@ -201,7 +209,7 @@ def _schliessen(pos, f, jetzt, grund, offen, buch, sperre, e):
         "belohnung_usd": round(belohnung_netto, 2),
         "kurseffekt_usd": round(pos["wert_usd"] + pos["kosten_usd"] - pos["einsatz_usd"], 2),
         "il_usd": round(pos["wert_usd"] - pos["gehalten_usd"], 2),
-        "kosten_usd": round(kosten, 2), "nachgezogen": pos["nachgezogen"],
+        "kosten_usd": round(kosten, 2), "nachgezogen": pos["nachgezogen"], "bereich_prozent": pos["bereich"],
         "im_bereich_prozent": round(pos["zeit_im_bereich_s"] / max(pos["laufzeit_s"], 1) * 100, 1),
         "apr_start": pos["apr_start"], "apr_ende": pos.get("apr_jetzt"),
         "apr_real_prozent": round((ende / pos["einsatz_usd"] - 1) * 100 / tage * 365, 1),
