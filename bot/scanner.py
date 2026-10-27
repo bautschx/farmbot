@@ -473,6 +473,19 @@ def scannen(konfig, cache, verlauf):
                 if not f["rate"]:
                     continue  # (noch) keine gemessene Ausschuettung
                 laufende += 1
+                # Bei Vertragsraten haengt der Anteil an der Liquiditaet im aktuellen Tick, und die
+                # springt mit dem Kurs (Pharaoh WAVAX/USDC am 27.10.2026: Faktor 3 in 30 Minuten).
+                # Deshalb Median der letzten 24 h, bei gerader Anzahl der hoehere Wert (vorsichtig).
+                messpunkte = None
+                if dex["typ"] != "cl_wachstum" and f["staked_L"]:
+                    lk = f"{name}:L:{f['pool']}"
+                    reihe = [x for x in verlauf.get(lk, []) if x[0] > jetzt - 86400] + [[jetzt, f["staked_L"]]]
+                    verlauf[lk] = reihe
+                    werte = sorted(x[1] for x in reihe)
+                    L_med = werte[len(werte) // 2]
+                    f["rate"] = f["rate"] * f["staked_L"] / L_med
+                    f["staked_L"] = L_med
+                    messpunkte = len(reihe)
                 tvl = sum(b / 10 ** tokens[t]["d"] * preis.get(t, 0)
                           for t, b in ((f["t0"], f["b0"]), (f["t1"], f["b1"])))
                 pos = {str(b): eigene_position(f, tokens, preis, wert, b)
@@ -514,6 +527,7 @@ def scannen(konfig, cache, verlauf):
                     "paar_schwankung_24h_prozent": None if schwankung is None else round(schwankung, 1),
                     "ausschuettung_tag_usd": round(f["rate"] * f["staked_L"] * 86400
                                                    / 10 ** tokens[rt]["d"] * preis.get(rt, 0), 2),
+                    "messpunkte": messpunkte,
                     "mein_apr": {b: (None if v is None else round(v["apr"], 1)) for b, v in pos.items()},
                     "mein_ertrag_tag_usd": {b: (None if v is None else round(v["tag_usd"], 3))
                                             for b, v in pos.items()},
