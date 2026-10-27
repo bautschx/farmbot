@@ -2,7 +2,8 @@ name: Farmbot
 
 on:
   schedule:
-    - cron: "17 * * * *"   # Farm-Jagd einmal pro Stunde
+    - cron: "17 * * * *"   # Farm-Jagd zweimal pro Stunde
+    - cron: "47 * * * *"
   workflow_dispatch:
     inputs:
       modus:
