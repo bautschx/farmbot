@@ -57,7 +57,7 @@ h2{font-size:17px;margin:28px 0 10px}
   <thead><tr>
     <th>Chain · DEX</th><th>Paar</th><th>Belohnung</th>
     <th class="zahl">Dein APR</th><th class="zahl">Dein Ertrag/Tag</th>
-    <th class="zahl">Pool-TVL</th><th class="zahl">Gebühr</th><th class="zahl">Belohnung 24 h</th>
+    <th class="zahl">Pool-TVL</th><th class="zahl">Paar 24 h</th><th class="zahl">Gebühr</th><th class="zahl">Belohnung 24 h</th>
     <th>Regeln</th><th>Pool</th>
   </tr></thead>
   <tbody id="zeilen"></tbody>
@@ -73,7 +73,7 @@ h2{font-size:17px;margin:28px 0 10px}
 
 <script>
 const EXPLORER = {"Base":"https://basescan.org/address/","OP Mainnet":"https://optimistic.etherscan.io/address/","Arbitrum":"https://arbiscan.io/address/","BNB Chain":"https://bscscan.com/address/","Avalanche":"https://snowtrace.io/address/"};
-const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 200 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt"};
+const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 200 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt",paar_ruhig:"Paar ruhig (24 h)"};
 let daten = null;
 const $ = id => document.getElementById(id);
 const usd = (x, n=0) => x == null ? "–" : x.toLocaleString("de-AT",{minimumFractionDigits:n,maximumFractionDigits:n}) + " $";
@@ -87,7 +87,7 @@ function zeichne(){
   const tb = $("zeilen"); tb.innerHTML = "";
   if(!liste.length){
     const ersterLauf = daten.dexe.every(d => !d.gemessen);
-    tb.innerHTML = '<tr><td colspan="10" class="leer">' + (ersterLauf
+    tb.innerHTML = '<tr><td colspan="11" class="leer">' + (ersterLauf
       ? 'Erster Lauf: Die Ausschüttung wird gemessen, indem der Bot den Belohnungszähler jeder Farm mit dem nächsten Lauf vergleicht. Ab dem zweiten Lauf stehen hier echte Werte.'
       : 'Keine Farm in dieser Ansicht.') + '</td></tr>';
   }
@@ -99,7 +99,7 @@ function zeichne(){
     tr.innerHTML = `<td>${f.chain}<br><span class="klein">${f.dex}</span></td><td>${f.paar}</td>
       <td>${f.belohnung}<br><span class="klein">${f.belohnung_preis!=null?f.belohnung_preis.toPrecision(4)+" $":"Preis unbekannt"}</span></td>
       <td class="zahl"><b>${pz(f.mein_apr[b])}</b></td><td class="zahl">${usd(f.mein_ertrag_tag_usd[b],2)}</td>
-      <td class="zahl">${usd(f.tvl_usd)}</td><td class="zahl">${pz(f.gebuehr_prozent,2)}</td>
+      <td class="zahl">${usd(f.tvl_usd)}</td><td class="zahl">${f.paar_schwankung_24h_prozent==null?"<span class='klein'>sammelt noch</span>":pz(f.paar_schwankung_24h_prozent,1)}</td><td class="zahl">${pz(f.gebuehr_prozent,2)}</td>
       <td class="zahl">${z24==null?"<span class='klein'>sammelt noch</span>":pz(z24,1)}</td>
       <td style="white-space:normal;min-width:260px">${regeln}</td><td>${link}</td>`;
     tb.appendChild(tr);
