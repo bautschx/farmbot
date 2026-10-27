@@ -28,7 +28,15 @@ S = {  # Funktions-Selektoren (keccak256, erste 4 Bytes), am 27.10.2026 berechne
     "DISTRIBUTION": "7c91e4eb", "globalState": "e76c01e4", "plugin": "ef01df4f",
     "incentive": "1d4632ac", "currentLiquidity": "46caf2ae", "rewardRates": "a88a5c16",
     "rewardReserves": "f0de8228", "getReserves": "0902f1ac",
+    # Ramses-V3-Bauart (Pharaoh): Voter-Listen, Gauge-Rate je Token, aktive Liquiditaet
+    "getAllPools": "d88ff1f4", "getAllGauges": "c946c5cc", "gaugeForPool": "2045be90",
+    "isAlive": "1703e5f9", "liquidity": "1a686502", "rewardRateFor": "221ca18c",
+    # PancakeSwap V3: MasterChefV3 und LM-Pool je Pool
+    "lmPool": "540d4918", "masterChef": "575a86b2", "lmLiquidity": "c3487ff8",
+    "poolLength": "081e3eda", "poolInfo": "1526fe27", "totalAllocPoint": "17caf6f1",
+    "latestPeriodCakePerSecond": "c4f6a8ce", "latestPeriodEndTime": "6d4cec78",
 }
+PANCAKE_PRECISION = 10 ** 12  # MasterChefV3.PRECISION(), am 27.10.2026 gelesen
 Q96 = 2 ** 96
 Q128 = 2 ** 128
 JAHR = 365 * 24 * 3600
@@ -207,6 +215,123 @@ def algebra_lesen(chain, dex, cache):
     return voter, anzahl, pools, farmen
 
 
+def als_adr_liste(h):
+    """ABI-Rueckgabe address[] (ein dynamisches Feld)."""
+    if not h or len(h) < 130:
+        return []
+    d = h[2:]
+    n = int(d[64:128], 16)
+    return ["0x" + d[128 + 64 * i + 24:128 + 64 * (i + 1)] for i in range(n)]
+
+
+def ramses_lesen(chain, dex, cache):
+    """Pharaoh (Ramses-V3-Bauart): Pools ueber den Voter (getAllPools), Gauge je Pool ueber
+    gaugeForPool. Die Wochenmenge eines Gauges wird gleichmaessig auf alle Liquiditaet im
+    Bereich verteilt, ohne Staking und ohne Boost: GaugeV3 rechnet
+    amount = tokenTotalSupplyByPeriod * Sekunden-im-Bereich-Anteil / Woche, und
+    rewardRate(token) = Wochenmenge / Woche. Rate je Liquiditaet = rewardRate / liquidity().
+    Am 27.10.2026 am Quelltext (github.com/pharaohexchange/pharaoh-contracts, GaugeV3.sol) und
+    am Vertrag geprueft: rewardRate 2,9532 PHAR/s, left() passt exakt zur Restzeit der Woche.
+    Klassische Pools (ohne tickSpacing) liefern nur Preise und Liquiditaet, keine Farm."""
+    c = cache.setdefault("dex", {}).setdefault(f"{chain.name}|{dex['name']}", {})
+    if not c.get("voter"):
+        fabrik = als_adr(chain.call(dex["seed_pool"], aufruf(S["factory"])))
+        c["voter"] = als_adr(chain.call(fabrik, aufruf(S["voter"])))
+    voter = c["voter"]
+    alle = als_adr_liste(chain.call(voter, aufruf(S["getAllPools"])))
+    paare = c.setdefault("paare", {})  # pool -> [token0, token1]
+    neu = [p for p in alle if p not in paare]
+    tok = _m(chain, [(p, aufruf(S[f])) for p in neu for f in ("token0", "token1")])
+    for i, p in enumerate(neu):
+        t0, t1 = als_adr(tok[2 * i]), als_adr(tok[2 * i + 1])
+        if t0 and t1:
+            paare[p] = [t0, t1]
+    pools = [[p] + paare[p] for p in alle if p in paare]
+    g_res = _m(chain, [(voter, aufruf(S["gaugeForPool"], b[0])) for b in pools])
+    gauges = [als_adr(g) for g in g_res]
+    lebt = _m(chain, [(voter, aufruf(S["isAlive"], g)) for g in gauges if g and g != NULL])
+    kandidaten, k = [], 0
+    for b, g in zip(pools, gauges):
+        if g and g != NULL:
+            if als_int(lebt[k]) == 1:
+                kandidaten.append((b, g))
+            k += 1
+    felder_p = ["slot0", "liquidity", "tickSpacing", "fee"]
+    aufr = []
+    for b, g in kandidaten:
+        aufr += [(b[0], aufruf(S[f])) for f in felder_p] + \
+                [(g, aufruf(S["rewardRateFor"], dex["belohnung"]))]
+    res = _m(chain, aufr)
+    farmen = []
+    for i, (b, g) in enumerate(kandidaten):
+        r = res[i * 5:(i + 1) * 5]
+        if r[0] is None or r[2] is None or als_int(r[2]) is None:
+            continue  # klassischer Pool: keine konzentrierte Liquiditaet
+        L = als_int(r[1]) or 0
+        rate_ges = als_int(r[4]) or 0
+        farmen.append({
+            "pool": b[0], "gauge": g, "dex": dex["name"], "belohnung": dex["belohnung"],
+            "t0": b[1], "t1": b[2], "sqrtP": als_int(r[0], 0), "tick": als_int(r[0], 1, signed=True),
+            "staked_L": L, "tickSpacing": als_int(r[2], signed=True), "fee": als_int(r[3]),
+            "rate": (rate_ges / L) if rate_ges > 0 and L > 0 else 0.0,
+            "gemessen_bis": int(time.time()),
+        })
+    return voter, len(alle), pools, farmen
+
+
+def pancake_lesen(chain, dex, cache):
+    """PancakeSwap V3 (BNB): alle Farmen stehen im MasterChefV3 (poolInfo je pid).
+    Rate eines Pools = latestPeriodCakePerSecond * allocPoint / totalAllocPoint / PRECISION,
+    solange die Periode laeuft. Verteilt wird ueber den LM-Pool auf die gestakte
+    (geboostete) Liquiditaet im Bereich: Rate je L = Pool-Rate / lmLiquidity().
+    Am 27.10.2026 geprueft: USDT/WBNB 0,01 % (pid 137) 0,008823 CAKE/s, identisch mit
+    getLatestPeriodInfo(pool). Eigene Position ohne veCAKE-Boost (Faktor 1)."""
+    c = cache.setdefault("dex", {}).setdefault(f"{chain.name}|{dex['name']}", {})
+    if not c.get("masterchef"):
+        lm = als_adr(chain.call(dex["seed_pool"], aufruf(S["lmPool"])))
+        c["masterchef"] = als_adr(chain.call(lm, aufruf(S["masterChef"])))
+    mc = c["masterchef"]
+    anzahl = als_int(chain.call(mc, aufruf(S["poolLength"])))
+    kopf = _m(chain, [(mc, aufruf(S[f])) for f in
+                      ("latestPeriodCakePerSecond", "totalAllocPoint", "latestPeriodEndTime")])
+    cps, alloc_ges, ende = (als_int(k) or 0 for k in kopf)
+    infos = _m(chain, [(mc, aufruf(S["poolInfo"], pid)) for pid in range(anzahl + 1)])
+    aktiv = []
+    for r in infos:
+        p = als_adr(r, 1)
+        alloc = als_int(r, 0) or 0
+        if p and p != NULL and alloc > 0:
+            aktiv.append(([p, als_adr(r, 2), als_adr(r, 3)], alloc))
+    pools = [b for b, _ in aktiv]
+    lms = c.setdefault("lm", {})
+    neu = [b[0] for b in pools if b[0] not in lms]
+    for p, r in zip(neu, _m(chain, [(p, aufruf(S["lmPool"])) for p in neu])):
+        if als_adr(r):
+            lms[p] = als_adr(r)
+    kandidaten = [(b, alloc, lms[b[0]]) for b, alloc in aktiv if lms.get(b[0]) not in (None, NULL)]
+    aufr = []
+    for b, _, lm in kandidaten:
+        aufr += [(b[0], aufruf(S[f])) for f in ("slot0", "tickSpacing", "fee")] + \
+                [(lm, aufruf(S["lmLiquidity"]))]
+    res = _m(chain, aufr)
+    laeuft = ende > time.time() and alloc_ges > 0
+    farmen = []
+    for i, (b, alloc, lm) in enumerate(kandidaten):
+        r = res[i * 4:(i + 1) * 4]
+        if r[0] is None:
+            continue
+        L = als_int(r[3]) or 0
+        rate_ges = cps * alloc / alloc_ges / PANCAKE_PRECISION if laeuft else 0
+        farmen.append({
+            "pool": b[0], "gauge": lm, "dex": dex["name"], "belohnung": dex["belohnung"],
+            "t0": b[1], "t1": b[2], "sqrtP": als_int(r[0], 0), "tick": als_int(r[0], 1, signed=True),
+            "staked_L": L, "tickSpacing": als_int(r[1], signed=True), "fee": als_int(r[2]),
+            "rate": (rate_ges / L) if rate_ges > 0 and L > 0 else 0.0,
+            "gemessen_bis": int(time.time()),
+        })
+    return mc, anzahl, pools, farmen
+
+
 def bestaende_uebernehmen(farmen, markt):
     m = {x["pool"]: x for x in markt}
     for f in farmen:
@@ -292,7 +417,7 @@ def scannen(konfig, cache, verlauf):
         chain = Chain(name, cfg["rpc"], cfg["id"])
         for dex in cfg["dexe"]:
             eintrag = {"chain": name, "dex": dex["name"], "typ": dex["typ"]}
-            if dex["typ"] not in ("cl_wachstum", "algebra"):
+            if dex["typ"] not in ("cl_wachstum", "algebra", "ramses_v3", "pancake_masterchef"):
                 eintrag["stand"] = "noch nicht angebunden"
                 status.append(eintrag)
                 continue
@@ -300,6 +425,14 @@ def scannen(konfig, cache, verlauf):
                 if dex["typ"] == "algebra":
                     fabrik, anzahl, pools, farmen = algebra_lesen(chain, dex, cache)
                     markt = marktdaten(chain, pools, "globalState")
+                    paare = farmen
+                elif dex["typ"] == "ramses_v3":
+                    fabrik, anzahl, pools, farmen = ramses_lesen(chain, dex, cache)
+                    markt = marktdaten(chain, pools)
+                    paare = farmen
+                elif dex["typ"] == "pancake_masterchef":
+                    fabrik, anzahl, pools, farmen = pancake_lesen(chain, dex, cache)
+                    markt = marktdaten(chain, pools)
                     paare = farmen
                 else:
                     fabrik, anzahl, pools, paare = pools_mit_farm(chain, dex, cache)
@@ -368,6 +501,8 @@ def scannen(konfig, cache, verlauf):
                     # unbekannt (noch keine 24 h Verlauf) zaehlt als nicht bestanden
                     "paar_ruhig": schwankung is not None and
                         schwankung <= regeln["max_paar_schwankung_24h_prozent"],
+                    # DEX kann verdiente Belohnungen nach eigenem Ermessen einbehalten (z. B. Pharaoh)
+                    "auszahlung_sicher": not dex.get("einbehalt"),
                 }
                 ergebnis.append({
                     "chain": name, "dex": f["dex"], "pool": f["pool"], "gauge": f["gauge"],
@@ -393,6 +528,7 @@ def scannen(konfig, cache, verlauf):
                             "belohnung_preis": preis.get(rt),
                             "belohnung_liquiditaet_usd": round(liq_rt),
                             "ausschuettung_tag_usd": round(emission_tag),
+                            "hinweis": dex.get("einbehalt"),
                             "abfragen": chain.abfragen})
             status.append(eintrag)
     ergebnis.sort(key=lambda e: -(e["mein_apr"].get("2") or 0))

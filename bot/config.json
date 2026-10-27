@@ -115,7 +115,8 @@
           "name": "Pharaoh",
           "typ": "ramses_v3",
           "seed_pool": "0xf01449c0ba930b6e2caca3def3ccbd7a3e589534",
-          "belohnung": "0x13a466998ce03db73abc2d4df3bbd845ed1f28e7"
+          "belohnung": "0x13a466998ce03db73abc2d4df3bbd845ed1f28e7",
+          "einbehalt": "Pharaoh kann Belohnungen einbehalten (Abuse-Prevention-Modul, Regeln nicht offen). WAVAX/USDC-Pool: 2.513 Einbehalte vom 19. bis 27.10.2026."
         },
         {
           "name": "Blackhole",
