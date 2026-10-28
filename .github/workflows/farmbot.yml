@@ -1,9 +1,8 @@
 name: Farmbot
 
 on:
-  schedule:
-    - cron: "17 * * * *"   # Farm-Jagd zweimal pro Stunde
-    - cron: "47 * * * *"
+  # Startsignal alle 30 Minuten kommt von cron-job.org (Job "Farmbot", seit 28.10.2026),
+  # weil der GitHub-Zeitplan viele Laeufe ausfallen liess (27./28.10.: 6 statt ~24 in 12 h).
   workflow_dispatch:
     inputs:
       modus:
