@@ -516,6 +516,8 @@ def scannen(konfig, cache, verlauf):
                 if t in preis and preis[t] > 0:
                     uk = f"{name}:usd:{t}"
                     reihe = verlauf.setdefault(uk, [])
+                    if reihe and reihe[-1][0] == jetzt:
+                        continue  # zweiter DEX auf derselben Chain: Kurs in diesem Lauf schon erfasst
                     reihe.append([jetzt, float(f"{preis[t]:.6g}")])
                     # aelter als 24 h nur ein Punkt je 4 h, damit verlauf.json klein bleibt
                     gesehen, neu = set(), []
