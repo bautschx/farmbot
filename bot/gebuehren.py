@@ -33,17 +33,31 @@ def _gt(url):
 
 def pools_holen(einstellung, stand, jetzt):
     """Poolliste von GeckoTerminal, einmal am Tag aufgefrischt."""
-    if jetzt - stand.get("liste_ts", 0) < einstellung.get("liste_abstand_h", 20) * 3600 and stand.get("liste"):
+    vorhanden = {p["chain"] for p in stand.get("liste", [])}
+    fehlt = [c for c in einstellung["chains"] if c not in vorhanden]
+    frisch = jetzt - stand.get("liste_ts", 0) < einstellung.get("liste_abstand_h", 20) * 3600
+    if stand.get("liste") and frisch and not (fehlt and jetzt - stand.get("nachhol_ts", 0) > 3600):
         return stand["liste"]
+    if stand.get("liste") and frisch and fehlt:
+        # nur die fehlenden Chains nachholen (z. B. nach einer Ratenbegrenzung)
+        stand["nachhol_ts"] = jetzt
+        einstellung = {**einstellung, "chains": {c: einstellung["chains"][c] for c in fehlt}}
+        alt = stand["liste"]
+    else:
+        alt = []
     liste = []
     for chain, c in einstellung["chains"].items():
         dollar = {d.lower() for d in c["dollar"]}
         for dex in c["dexe"]:
-            time.sleep(2.5)  # GeckoTerminal erlaubt ca. 30 Abfragen pro Minute
-            try:
-                daten = _gt(GT.format(net=c["gt_netz"], dex=dex)).get("data", [])
-            except Exception as e:
-                print("GeckoTerminal", dex, e)
+            daten = None
+            for versuch in range(3):
+                time.sleep(4 + 8 * versuch)  # GeckoTerminal erlaubt ca. 30 Abfragen pro Minute
+                try:
+                    daten = _gt(GT.format(net=c["gt_netz"], dex=dex)).get("data", [])
+                    break
+                except Exception as e:
+                    print("GeckoTerminal", dex, e)
+            if daten is None:
                 continue
             for p in daten[:einstellung.get("pools_je_dex", 8)]:
                 a = p["attributes"]
@@ -60,7 +74,10 @@ def pools_holen(einstellung, stand, jetzt):
                     continue
                 liste.append({"chain": chain, "dex": dex, "pool": adr.lower(), "name": a.get("name", ""),
                               "tvl": round(tvl), "vol24": round(float((a.get("volume_usd") or {}).get("h24") or 0))})
-    stand["liste"], stand["liste_ts"] = liste, jetzt
+    if alt:
+        stand["liste"] = alt + liste
+    else:
+        stand["liste"], stand["liste_ts"] = liste, jetzt
     print(f"Gebuehren: {len(liste)} Pools von GeckoTerminal")
     return liste
 
