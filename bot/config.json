@@ -460,7 +460,8 @@
           "https://hyperliquid.drpc.org"
         ]
       }
-    ]
+    ],
+    "version": 2
   },
   "gebuehren": {
     "_hinweis": "Gebuehren-Ertrag ohne Belohnungs-Token, gemessen am Zaehler feeGrowthGlobal. Pools von GeckoTerminal (umsatzstaerkste je DEX).",
