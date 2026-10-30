@@ -1,7 +1,17 @@
 {
   "_hinweis": "Adressen am 27.10.2026 ueber Chain-Daten geprueft. seed_pool: ein bekannter Pool je DEX; daraus findet der Bot Factory, alle Pools und alle Farmen selbst. belohnung: Token, in dem die Farmen dieses DEX auf dieser Chain auszahlen.",
   "position_usd": 100,
-  "bereiche_prozent": [2, 3, 4, 5, 6, 8, 10, 12, 15],
+  "bereiche_prozent": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    8,
+    10,
+    12,
+    15
+  ],
   "regeln": {
     "max_poolgebuehr_prozent": 0.3,
     "min_apr_prozent": 500,
@@ -159,6 +169,41 @@
           "seed_pool": "0x172fcd41e0913e95784454622d1c3724f546f849",
           "belohnung": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82"
         }
+      ]
+    }
+  },
+  "dexsuche": {
+    "_hinweis": "Neue DEXe von DefiLlama, einmal am Tag. Chain-Namen so, wie DefiLlama sie schreibt.",
+    "abstand_h": 20,
+    "max_alter_tage": 45,
+    "min_tvl_usd": 20000,
+    "max_tvl_usd": 5000000,
+    "chains": {
+      "Base": [
+        "Base"
+      ],
+      "OP Mainnet": [
+        "OP Mainnet",
+        "Optimism"
+      ],
+      "Arbitrum": [
+        "Arbitrum"
+      ],
+      "BNB Chain": [
+        "BSC",
+        "Binance"
+      ],
+      "Avalanche": [
+        "Avalanche"
+      ],
+      "Robinhood": [
+        "Robinhood Chain",
+        "Robinhood"
+      ],
+      "HyperEVM": [
+        "Hyperliquid L1",
+        "Hyperliquid",
+        "HyperEVM"
       ]
     }
   }

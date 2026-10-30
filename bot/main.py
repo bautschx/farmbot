@@ -15,6 +15,7 @@ sys.path.insert(0, HIER)
 from rpc import Chain, aufruf, als_int, als_adr, MULTICALL3, RPCFehler  # noqa: E402
 import scanner  # noqa: E402
 import simulation  # noqa: E402
+import dexsuche  # noqa: E402
 
 WURZEL = os.path.dirname(HIER)
 DATEN = os.path.join(WURZEL, "docs", "data")
@@ -118,6 +119,18 @@ def scan(konfig):
         if telegram(text):
             gemeldet.update(f["gauge"] for f in neu)
     cache["gemeldet"] = sorted(gemeldet)
+
+    # Neue DEXe auf unseren Chains suchen (DefiLlama, einmal am Tag)
+    if konfig.get("dexsuche"):
+        try:
+            neue_dexe, alle = dexsuche.suchen(konfig["dexsuche"], cache)
+            if alle is not None:
+                speichern(os.path.join(DATEN, "neue_dexe.json"),
+                          {"stand": time.strftime("%d.%m.%Y %H:%M", time.gmtime()), "dexe": alle})
+            if neue_dexe and telegram(dexsuche.nachricht(neue_dexe)):
+                dexsuche.als_gemeldet(cache, neue_dexe)
+        except Exception as e:  # die Farm-Jagd darf daran nie scheitern
+            print("DEX-Suche fehlgeschlagen:", e)
     speichern(os.path.join(HIER, "cache.json"), cache)
 
     # Simulation (Papierhandel) mit den Daten dieses Laufs weiterrechnen
