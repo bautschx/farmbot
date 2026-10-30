@@ -79,7 +79,7 @@ def pools_holen(einstellung, stand, jetzt):
     else:
         stand["liste"], stand["liste_ts"] = liste, jetzt
     print(f"Gebuehren: {len(liste)} Pools von GeckoTerminal")
-    return liste
+    return stand["liste"]
 
 
 def _wert_je_L(sqrt_p, r, d0, d1, dollar_ist_1):
