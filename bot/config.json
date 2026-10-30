@@ -206,5 +206,58 @@
         "HyperEVM"
       ]
     }
+  },
+  "erkunden": {
+    "_hinweis": "Kandidaten fuer Claude: Pools neuer DEXe, die der Bot am Vertrag ausliest (docs/data/erkundung.json).",
+    "kandidaten": [
+      {
+        "dex": "Ramses",
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ],
+        "pools": [
+          "0xf6fef01a81f35a08ac27f92ea21d0c2ebcdbad2f",
+          "0xe0453a4bf33eac4d3f1f555a8020d8b29a44558c"
+        ]
+      },
+      {
+        "dex": "Nest",
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ],
+        "pools": [
+          "0x875362a6df457a286c66c0cf2046d9a4fd3fe55c",
+          "0xb1fb35a21f2e1dcc6f287bb24bc67199a054adab"
+        ]
+      },
+      {
+        "dex": "SwapHood",
+        "chain": "Robinhood",
+        "id": 4663,
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ],
+        "pools": [
+          "0x6356d82a3d7b9223764339b5f50e7ed01641fb30"
+        ]
+      },
+      {
+        "dex": "Giga",
+        "chain": "Robinhood",
+        "id": 4663,
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ],
+        "pools": [
+          "0x88e8ead6f139928275b8547040f5d83a748f0223"
+        ]
+      }
+    ]
   }
 }

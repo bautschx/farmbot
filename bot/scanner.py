@@ -483,7 +483,7 @@ def scannen(konfig, cache, verlauf):
                 tokens = token_infos(chain, alle_tokens, cache)
                 bestaende_uebernehmen(farmen, markt)
                 preis, tiefe = preise_ableiten(markt, tokens, cfg["dollar"])
-            except RPCFehler as e:
+            except Exception as e:  # ein kaputter DEX darf den Lauf nicht abbrechen
                 eintrag["stand"] = f"Fehler: {str(e)[:160]}"
                 status.append(eintrag)
                 continue

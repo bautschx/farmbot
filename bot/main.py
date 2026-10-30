@@ -16,6 +16,7 @@ from rpc import Chain, aufruf, als_int, als_adr, MULTICALL3, RPCFehler  # noqa: 
 import scanner  # noqa: E402
 import simulation  # noqa: E402
 import dexsuche  # noqa: E402
+import erkunden  # noqa: E402
 
 WURZEL = os.path.dirname(HIER)
 DATEN = os.path.join(WURZEL, "docs", "data")
@@ -131,6 +132,14 @@ def scan(konfig):
                 dexsuche.als_gemeldet(cache, neue_dexe)
         except Exception as e:  # die Farm-Jagd darf daran nie scheitern
             print("DEX-Suche fehlgeschlagen:", e)
+    # Kandidaten-DEXe am Vertrag erkunden (nur wenn sich die Liste geaendert hat)
+    if konfig.get("erkunden"):
+        try:
+            erk = erkunden.laufen(konfig["erkunden"], cache)
+            if erk is not None:
+                speichern(os.path.join(DATEN, "erkundung.json"), erk)
+        except Exception as e:
+            print("Erkundung fehlgeschlagen:", e)
     speichern(os.path.join(HIER, "cache.json"), cache)
 
     # Simulation (Papierhandel) mit den Daten dieses Laufs weiterrechnen
