@@ -357,6 +357,106 @@
         "rpc": [
           "https://rpc.mainnet.chain.robinhood.com"
         ]
+      },
+      {
+        "dex": "Kittenswap V3",
+        "pools": [
+          "0xd8789c18958371dfe3e03fecbfa74096561b0760",
+          "0xc556606315051b23161b906d6e67f5aca8002557"
+        ],
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ]
+      },
+      {
+        "dex": "Kittenswap Algebra",
+        "pools": [
+          "0x65818645f86f5019680ad79ba7606943d672a5e9",
+          "0x12df9913e9e08453440e3c4b1ae73819160b513e"
+        ],
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ]
+      },
+      {
+        "dex": "Hybra V3",
+        "pools": [
+          "0x3603ffebb994cc110b4186040cac3005b2cf4465",
+          "0x494385b47d58ef303413e1141acdf7700bc150ef"
+        ],
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ]
+      },
+      {
+        "dex": "Project X V2",
+        "pools": [
+          "0x2cf9731b75cdf79ea9ff21f17c318c12f9c79fd6"
+        ],
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ]
+      },
+      {
+        "dex": "HX Finance",
+        "pools": [
+          "0x4d158925f6a3b696b3542e748e90f4f694e66910"
+        ],
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ]
+      },
+      {
+        "dex": "Gliquid",
+        "pools": [
+          "0xd391259888fe4599e8011eea5e27b93a9dc74920"
+        ],
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ]
+      },
+      {
+        "dex": "Upheaval",
+        "pools": [
+          "0x6df19a40aaf19d01c2616a1765d4d2a4842bffaf",
+          "0xe3e99a283668812026c243ff42e624ef172e21a9"
+        ],
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ]
+      },
+      {
+        "dex": "Hydrex Classic",
+        "pools": [
+          "0xecee642e6a8e869bb21331d3c5aebb1d172dc151"
+        ],
+        "chain": "Base",
+        "id": 8453,
+        "rpc": [
+          "https://mainnet.base.org",
+          "https://base-rpc.publicnode.com"
+        ]
       }
     ]
   }
