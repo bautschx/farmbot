@@ -62,6 +62,45 @@ def _liste(h):
         return []
 
 
+def _roh(chain, ziel, sel, *args):
+    try:
+        return chain.call(ziel, aufruf(sel, *args))
+    except Exception:
+        return None
+
+
+def _algebra_farm(chain, pool, plugin, vpool):
+    """Algebra-Eternal-Farming: virtueller Pool (Raten), Farming-Vertrag, Belohnungs-Token."""
+    f = {}
+    h = _roh(chain, vpool, "a88a5c16")  # rewardRates()
+    if h:
+        f["rate0_roh"], f["rate1_roh"] = als_int(h, 0), als_int(h, 1)
+    h = _roh(chain, vpool, "f0de8228")  # rewardReserves()
+    if h:
+        f["reserve0_roh"], f["reserve1_roh"] = als_int(h, 0), als_int(h, 1)
+    h = _roh(chain, vpool, "46caf2ae")  # currentLiquidity()
+    f["currentLiquidity"] = als_int(h) if h else None
+    h = _roh(chain, vpool, "556ed30e")  # deactivated()
+    f["deactivated"] = als_int(h) if h else None
+    farm = als_adr(_roh(chain, plugin, "8a2ade58")) if _roh(chain, plugin, "8a2ade58") else None
+    f["farmingAddress"] = farm
+    if farm:
+        h = _roh(chain, farm, "57655846", pool)  # incentiveKeys(pool)
+        if h:
+            rt, bt = als_adr(h, 0), als_adr(h, 1)
+            f["rewardToken"] = f"{rt} {_sym(chain, rt)}"
+            f["bonusRewardToken"] = f"{bt} {_sym(chain, bt)}"
+            f["nonce"] = als_int(h, 3)
+            d = als_int(_roh(chain, rt, "313ce567")) or 18
+            if f.get("rate0_roh") is not None:
+                f["rate0_pro_tag"] = round(f["rate0_roh"] / 10 ** d * 86400, 2)
+                f["reserve0"] = round((f.get("reserve0_roh") or 0) / 10 ** d, 2)
+        h = _roh(chain, farm, "dd56e5d8")  # farmingCenter()
+        if h:
+            f["farmingCenter"] = als_adr(h)
+    return f
+
+
 def pool_erkunden(chain, pool, voter_vorgabe=None):
     e = {"pool": pool}
     t0 = als_adr(_versuch(chain, pool, "token0()"))
@@ -147,6 +186,7 @@ def pool_erkunden(chain, pool, voter_vorgabe=None):
         inc = als_adr(_versuch(chain, e["plugin()"], "incentive()"))
         if inc and inc != NULL:
             e["algebra_incentive"] = inc
+            e["algebra_farm"] = _algebra_farm(chain, pool, e["plugin()"], inc)
     e.setdefault("vorlage_vermutet", "keine Farm gefunden")
     return e
 
