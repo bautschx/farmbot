@@ -257,6 +257,86 @@
         "pools": [
           "0x88e8ead6f139928275b8547040f5d83a748f0223"
         ]
+      },
+      {
+        "dex": "Ramses (Robinhood)",
+        "pools": [
+          "0xfae65eaa11943f45e83d5b45dc7a7c801c51bfb0",
+          "0xf2a0be59ab76b96f957bd5e5b967f2b75e8db269"
+        ],
+        "chain": "Robinhood",
+        "id": 4663,
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ]
+      },
+      {
+        "dex": "Topaz (Robinhood)",
+        "pools": [
+          "0x8132252bd65e7c03f7b57739e1db1c58d6ee792f"
+        ],
+        "chain": "Robinhood",
+        "id": 4663,
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ]
+      },
+      {
+        "dex": "Alandale CL",
+        "pools": [
+          "0x7a35168956f129c032ec035cc47383a605a71df0",
+          "0x05e146f995aa70d0bf8481ee3d27368a537a8e0d"
+        ],
+        "chain": "Robinhood",
+        "id": 4663,
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ]
+      },
+      {
+        "dex": "Bush",
+        "pools": [
+          "0xc2fef42121fada751ba9f2107c4c8d4c593af435"
+        ],
+        "chain": "Robinhood",
+        "id": 4663,
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ]
+      },
+      {
+        "dex": "Abyss",
+        "pools": [
+          "0xdec74a2afabd34aa6f268c5161d2e9e210ca7185",
+          "0xb39c61326bdba51586eac45f6bb418364fc65c92"
+        ],
+        "chain": "Robinhood",
+        "id": 4663,
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ]
+      },
+      {
+        "dex": "Rubicon CLMM",
+        "pools": [
+          "0x7bf906d28fb2a01f8dab60c0412137126596297d"
+        ],
+        "chain": "Robinhood",
+        "id": 4663,
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ]
+      },
+      {
+        "dex": "Robinswap",
+        "pools": [
+          "0x86d3e4447cbcdf6b12600d17f117d39bbcfa10a5"
+        ],
+        "chain": "Robinhood",
+        "id": 4663,
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ]
       }
     ]
   }
