@@ -372,19 +372,6 @@
         ]
       },
       {
-        "dex": "Kittenswap Algebra",
-        "pools": [
-          "0x65818645f86f5019680ad79ba7606943d672a5e9",
-          "0x12df9913e9e08453440e3c4b1ae73819160b513e"
-        ],
-        "chain": "HyperEVM",
-        "id": 999,
-        "rpc": [
-          "https://rpc.hyperliquid.xyz/evm",
-          "https://hyperliquid.drpc.org"
-        ]
-      },
-      {
         "dex": "Hybra V3",
         "pools": [
           "0x3603ffebb994cc110b4186040cac3005b2cf4465",
@@ -456,6 +443,21 @@
         "rpc": [
           "https://mainnet.base.org",
           "https://base-rpc.publicnode.com"
+        ]
+      },
+      {
+        "dex": "Kittenswap Algebra (Voter)",
+        "voter": "0x6700a833034981b37ccae382c798d5fa75122f1e",
+        "pools": [
+          "0x12df9913e9e08453440e3c4b1ae73819160b513e",
+          "0x65818645f86f5019680ad79ba7606943d672a5e9",
+          "0x71d1fde797e1810711e4c9abcfca6ef04c266196"
+        ],
+        "chain": "HyperEVM",
+        "id": 999,
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
         ]
       }
     ]

@@ -62,7 +62,7 @@ def _liste(h):
         return []
 
 
-def pool_erkunden(chain, pool):
+def pool_erkunden(chain, pool, voter_vorgabe=None):
     e = {"pool": pool}
     t0 = als_adr(_versuch(chain, pool, "token0()"))
     t1 = als_adr(_versuch(chain, pool, "token1()"))
@@ -80,8 +80,8 @@ def pool_erkunden(chain, pool):
     e["globalState_ok"] = _versuch(chain, pool, "globalState()") is not None
 
     fabrik = e.get("factory()")
-    voter = None
-    if fabrik:
+    voter = voter_vorgabe
+    if fabrik and not voter:
         h = _versuch(chain, fabrik, "voter()")
         voter = als_adr(h) if h and len(h) >= 66 else None
     lm = e.get("lmPool()")
@@ -134,6 +134,14 @@ def pool_erkunden(chain, pool):
                     e["vorlage_vermutet"] = "Aero/Velodrome Slipstream"
                 else:
                     e["vorlage_vermutet"] = "Gauge unbekannter Bauart"
+    if e.get("plugin()"):
+        # alle Funktions-Selektoren im Plugin-Code (PUSH4), um die Farm-Anbindung zu erkennen
+        try:
+            code = chain.anfrage("eth_getCode", [e["plugin()"], "latest"])[2:]
+            import re
+            e["plugin_selektoren"] = sorted(set(re.findall(r"63([0-9a-f]{8})", code)))[:80]
+        except Exception as ex:
+            e["plugin_selektoren"] = f"Fehler {str(ex)[:60]}"
     if e.get("plugin()") and e["globalState_ok"]:
         e.setdefault("vorlage_vermutet", "Algebra")
         inc = als_adr(_versuch(chain, e["plugin()"], "incentive()"))
@@ -159,7 +167,7 @@ def laufen(einstellung, cache):
             continue
         for p in k.get("pools", []):
             try:
-                eintrag["pools"].append(pool_erkunden(chain, p.lower()))
+                eintrag["pools"].append(pool_erkunden(chain, p.lower(), k.get("voter")))
             except Exception as e:
                 eintrag["pools"].append({"pool": p, "fehler": str(e)[:160]})
         ergebnis["kandidaten"].append(eintrag)
