@@ -170,6 +170,26 @@
           "belohnung": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82"
         }
       ]
+    },
+    "HyperEVM": {
+      "id": 999,
+      "rpc": [
+        "https://rpc.hyperliquid.xyz/evm",
+        "https://hyperliquid.drpc.org"
+      ],
+      "dollar": {
+        "0xb88339cb7199b77e23db6e890353e22632ba630f": "USDC"
+      },
+      "gas_token": "0x5555555555555555555555555555555555555555",
+      "dexe": [
+        {
+          "name": "Ramses",
+          "typ": "ramses_v3",
+          "seed_pool": "0xf6fef01a81f35a08ac27f92ea21d0c2ebcdbad2f",
+          "belohnung": "0x555570a286f15ebdfe42b66ede2f724aa1ab5555",
+          "_hinweis": "Am 30.10.2026 erkundet: Ramses-V3-Bauart wie Pharaoh, Gauge zahlt RAM (nicht xRAM). Ob es wie Pharaoh ein Einbehalt-Modul gibt, ist noch nicht geprueft."
+        }
+      ]
     }
   },
   "dexsuche": {
