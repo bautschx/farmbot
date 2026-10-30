@@ -461,5 +461,51 @@
         ]
       }
     ]
+  },
+  "gebuehren": {
+    "_hinweis": "Gebuehren-Ertrag ohne Belohnungs-Token, gemessen am Zaehler feeGrowthGlobal. Pools von GeckoTerminal (umsatzstaerkste je DEX).",
+    "min_tvl_usd": 20000,
+    "pools_je_dex": 8,
+    "liste_abstand_h": 20,
+    "melde_apr_ab": 500,
+    "chains": {
+      "Robinhood": {
+        "id": 4663,
+        "gt_netz": "robinhood",
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ],
+        "dollar": [
+          "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
+        ],
+        "dexe": [
+          "ramses-v3-robinhood",
+          "uniswap-v3-robinhood",
+          "pancakeswap-v3-robinhood",
+          "alandale-cl",
+          "giga-v3",
+          "sushiswap-v3-robinhood"
+        ]
+      },
+      "HyperEVM": {
+        "id": 999,
+        "gt_netz": "hyperevm",
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ],
+        "dollar": [
+          "0xb88339cb7199b77e23db6e890353e22632ba630f",
+          "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb"
+        ],
+        "dexe": [
+          "kittenswap-algebra",
+          "hyperswap-v3",
+          "ramses-v3-hyperevm",
+          "project-x",
+          "hybra-finance-v3"
+        ]
+      }
+    }
   }
 }

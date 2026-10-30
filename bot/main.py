@@ -17,6 +17,7 @@ import scanner  # noqa: E402
 import simulation  # noqa: E402
 import dexsuche  # noqa: E402
 import erkunden  # noqa: E402
+import gebuehren  # noqa: E402
 
 WURZEL = os.path.dirname(HIER)
 DATEN = os.path.join(WURZEL, "docs", "data")
@@ -132,6 +133,26 @@ def scan(konfig):
                 dexsuche.als_gemeldet(cache, neue_dexe)
         except Exception as e:  # die Farm-Jagd darf daran nie scheitern
             print("DEX-Suche fehlgeschlagen:", e)
+    # Gebuehren-Ertrag von Pools ohne Farm (z. B. RamsesX Robinhood)
+    if konfig.get("gebuehren"):
+        try:
+            gb = gebuehren.messen(konfig["gebuehren"], cache)
+            speichern(os.path.join(DATEN, "gebuehren.json"),
+                      {"stand": time.strftime("%d.%m.%Y %H:%M UTC", time.gmtime()), "pools": gb})
+            grenze = konfig["gebuehren"].get("melde_apr_ab", 500)
+            gute = [x for x in gb if not x.get("vorlaeufig") and (x.get("apr_4") or 0) >= grenze]
+            st = cache["gebuehren"]
+            if gute and time.time() - st.get("gemeldet_ts", 0) > 20 * 3600:
+                zeilen = [f"• {x['chain']} · {x['dex']} · <b>{x['name']}</b>: ±2 % {x['apr_2']} %, "
+                          f"±4 % {x['apr_4']} %, ±8 % {x['apr_8']} % (Kurs 24 h {x.get('preis_aenderung_prozent')} %)"
+                          for x in gute[:10]]
+                if telegram("💸 <b>Gebühren-Pools über " + str(grenze) + " % (±4 %, letzte 24 h)</b>\n"
+                            + "\n".join(zeilen) + "\n\nNur Handelsgebühren, kein Belohnungs-Token. "
+                            "Gilt nur, solange der Kurs im Bereich bleibt."):
+                    st["gemeldet_ts"] = time.time()
+        except Exception as e:
+            print("Gebuehren-Messung fehlgeschlagen:", e)
+
     # Kandidaten-DEXe am Vertrag erkunden (nur wenn sich die Liste geaendert hat)
     if konfig.get("erkunden"):
         try:
