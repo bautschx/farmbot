@@ -178,7 +178,8 @@ def scan(konfig):
     # Merkl: neue Belohnungs-Kampagnen auf unseren Chains (alle 3 h)
     if konfig.get("merkl"):
         try:
-            mk = merkl.laufen(konfig["merkl"], cache)
+            mk = merkl.laufen(konfig["merkl"], cache,
+                             rpcs={n: c["rpc"] for n, c in konfig["chains"].items() if isinstance(c, dict) and c.get("rpc")})
             if mk is not None:
                 speichern(os.path.join(DATEN, "merkl.json"), mk)
                 if mk["neu"] and telegram(merkl.nachricht(mk["neu"])):
