@@ -19,6 +19,7 @@ import dexsuche  # noqa: E402
 import erkunden  # noqa: E402
 import gebuehren  # noqa: E402
 import fruehwarnung  # noqa: E402
+import chainradar  # noqa: E402
 
 WURZEL = os.path.dirname(HIER)
 DATEN = os.path.join(WURZEL, "docs", "data")
@@ -161,6 +162,17 @@ def scan(konfig):
                     st["gemeldet_ts"] = time.time()
         except Exception as e:
             print("Gebuehren-Messung fehlgeschlagen:", e)
+
+    # Chain-Radar: wachsende Chains und kleine DEXe mit hoher Belohnung (DefiLlama, einmal am Tag)
+    if konfig.get("chainradar"):
+        try:
+            erg = chainradar.laufen(konfig["chainradar"], cache)
+            if erg is not None:
+                speichern(os.path.join(DATEN, "chainradar.json"), erg)
+                if erg["neu"] and telegram(chainradar.nachricht(erg)):
+                    chainradar.als_gemeldet(cache, erg["neu"])
+        except Exception as e:
+            print("Chain-Radar fehlgeschlagen:", e)
 
     # Fruehwarnung: neue Pools mit viel Handel (alle DEXe), unbekannte DEXe gleich erkunden
     if konfig.get("fruehwarnung"):

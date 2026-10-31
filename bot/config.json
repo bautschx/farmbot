@@ -608,5 +608,34 @@
         ]
       }
     }
+  },
+  "chainradar": {
+    "_hinweis": "Einmal am Tag: DEX-Volumen je Chain (DefiLlama), auf wachsenden Chains kleine Pools mit hoher Belohnung von Projekten, die wir noch nicht anbinden.",
+    "abstand_h": 20,
+    "min_volumen_7t_usd": 20000000,
+    "min_wachstum_prozent": 10,
+    "immer_chains": [
+      "Base",
+      "Robinhood Chain",
+      "Hyperliquid L1",
+      "Avalanche",
+      "BSC",
+      "Arbitrum",
+      "OP Mainnet"
+    ],
+    "min_tvl_usd": 20000,
+    "max_tvl_usd": 3000000,
+    "min_apr_belohnung": 300,
+    "max_apr_plausibel": 50000,
+    "bekannte_projekte": [
+      "aerodrome",
+      "velodrome",
+      "aero",
+      "pharaoh",
+      "blackhole",
+      "pancakeswap",
+      "up33",
+      "ramses"
+    ]
   }
 }
