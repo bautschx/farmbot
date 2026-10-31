@@ -543,14 +543,24 @@ def scannen(konfig, cache, verlauf):
                 # springt mit dem Kurs (Pharaoh WAVAX/USDC am 27.10.2026: Faktor 3 in 30 Minuten).
                 # Deshalb Median der letzten 24 h, bei gerader Anzahl der hoehere Wert (vorsichtig).
                 messpunkte = None
-                if (dex["typ"] != "cl_wachstum" or f.get("vertragsrate")) and f["staked_L"]:
+                # Seit 31.10.2026: nie optimistischer rechnen als die Lage JETZT. Beispiel Aero
+                # USDC/ORCLc: Median-L ergab 6.690 %, aktuell lag 130-mal mehr Liquiditaet im Bereich
+                # (vfat 51 %, Zaehler der letzten Stunde 21 %). Bezug ist darum max(Median, jetzt).
+                if f["staked_L"]:
                     lk = f"{name}:L:{f['pool']}"
-                    reihe = [x for x in verlauf.get(lk, []) if x[0] > jetzt - 86400] + [[jetzt, f["staked_L"]]]
+                    L_jetzt = f["staked_L"]
+                    reihe = [x for x in verlauf.get(lk, []) if x[0] > jetzt - 86400] + [[jetzt, L_jetzt]]
                     verlauf[lk] = reihe
                     werte = sorted(x[1] for x in reihe)
                     L_med = werte[len(werte) // 2]
-                    f["rate"] = f["rate"] * f["staked_L"] / L_med
-                    f["staked_L"] = L_med
+                    L_ref = max(L_med, L_jetzt)
+                    f["L_median"], f["L_jetzt"] = L_med, L_jetzt
+                    if dex["typ"] != "cl_wachstum" or f.get("vertragsrate"):
+                        f["rate"] = f["rate"] * L_jetzt / L_ref
+                    else:
+                        # gemessene Rate je L gilt fuer die Liquiditaet im Messfenster (~ Median)
+                        f["rate"] = f["rate"] * L_med / L_ref
+                    f["staked_L"] = L_ref
                     messpunkte = len(reihe)
                 tvl = sum(b / 10 ** tokens[t]["d"] * preis.get(t, 0)
                           for t, b in ((f["t0"], f["b0"]), (f["t1"], f["b1"])))
