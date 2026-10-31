@@ -508,5 +508,105 @@
         ]
       }
     }
+  },
+  "fruehwarnung": {
+    "_hinweis": "Neue Pools (GeckoTerminal new_pools) mit viel Handel, alle 3 h. Unbekannte DEXe werden automatisch am Vertrag erkundet.",
+    "abstand_h": 3,
+    "min_tvl_usd": 30000,
+    "min_vol_usd": 100000,
+    "bekannte_dexe": [
+      "aerodrome-slipstream",
+      "aerodrome-slipstream-2",
+      "aerodrome-slipstream-3",
+      "aero-slipstream-base",
+      "aero-slipstream-robinhood",
+      "aero-volatile-base",
+      "velodrome-slipstream",
+      "pharaoh-v3",
+      "blackhole-avalanche",
+      "pancakeswap-v3-bsc",
+      "up-v3",
+      "ramses-v3-hyperevm"
+    ],
+    "chains": {
+      "Base": {
+        "id": 8453,
+        "gt_netz": "base",
+        "rpc": [
+          "https://mainnet.base.org",
+          "https://base-rpc.publicnode.com"
+        ],
+        "dollar": [
+          "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+        ]
+      },
+      "Robinhood": {
+        "id": 4663,
+        "gt_netz": "robinhood",
+        "rpc": [
+          "https://rpc.mainnet.chain.robinhood.com"
+        ],
+        "dollar": [
+          "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
+        ]
+      },
+      "HyperEVM": {
+        "id": 999,
+        "gt_netz": "hyperevm",
+        "rpc": [
+          "https://rpc.hyperliquid.xyz/evm",
+          "https://hyperliquid.drpc.org"
+        ],
+        "dollar": [
+          "0xb88339cb7199b77e23db6e890353e22632ba630f",
+          "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb"
+        ]
+      },
+      "Avalanche": {
+        "id": 43114,
+        "gt_netz": "avax",
+        "rpc": [
+          "https://avalanche-c-chain-rpc.publicnode.com",
+          "https://api.avax.network/ext/bc/C/rpc"
+        ],
+        "dollar": [
+          "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e"
+        ]
+      },
+      "BNB Chain": {
+        "id": 56,
+        "gt_netz": "bsc",
+        "rpc": [
+          "https://bsc-rpc.publicnode.com",
+          "https://bsc-dataseed.bnbchain.org"
+        ],
+        "dollar": [
+          "0x55d398326f99059ff775485246999027b3197955",
+          "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
+        ]
+      },
+      "Arbitrum": {
+        "id": 42161,
+        "gt_netz": "arbitrum",
+        "rpc": [
+          "https://arb1.arbitrum.io/rpc",
+          "https://arbitrum.drpc.org"
+        ],
+        "dollar": [
+          "0xaf88d065e77c8cc2239327c5edb3a432268e5831"
+        ]
+      },
+      "OP Mainnet": {
+        "id": 10,
+        "gt_netz": "optimism",
+        "rpc": [
+          "https://mainnet.optimism.io",
+          "https://optimism-rpc.publicnode.com"
+        ],
+        "dollar": [
+          "0x0b2c639c533813f4aa9d7837caf62653d097ff85"
+        ]
+      }
+    }
   }
 }

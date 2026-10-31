@@ -18,6 +18,7 @@ import simulation  # noqa: E402
 import dexsuche  # noqa: E402
 import erkunden  # noqa: E402
 import gebuehren  # noqa: E402
+import fruehwarnung  # noqa: E402
 
 WURZEL = os.path.dirname(HIER)
 DATEN = os.path.join(WURZEL, "docs", "data")
@@ -102,6 +103,14 @@ def scan(konfig):
     start = time.time()
     daten = scanner.scannen(konfig, cache, verlauf)
     daten["dauer_s"] = round(time.time() - start, 1)
+    # Fruehwarnung: frische Farmen markieren und sofort melden
+    try:
+        frisch = fruehwarnung.farmen_pruefen(daten, cache)
+        if frisch and telegram(fruehwarnung.farmen_nachricht(frisch)):
+            st = cache["fruehwarnung"]
+            st["gemeldet"] = sorted(set(st.get("gemeldet", [])) | {f["gauge"] for f in frisch})
+    except Exception as e:
+        print("Fruehwarnung Farmen fehlgeschlagen:", e)
     speichern(os.path.join(DATEN, "farmen.json"), daten)
     speichern(os.path.join(DATEN, "verlauf.json"), verlauf)
 
@@ -153,8 +162,27 @@ def scan(konfig):
         except Exception as e:
             print("Gebuehren-Messung fehlgeschlagen:", e)
 
+    # Fruehwarnung: neue Pools mit viel Handel (alle DEXe), unbekannte DEXe gleich erkunden
+    if konfig.get("fruehwarnung"):
+        try:
+            fw = konfig["fruehwarnung"]
+            treffer, kand = fruehwarnung.pools_pruefen(fw, cache, set(fw.get("bekannte_dexe", [])))
+            if treffer:
+                speichern(os.path.join(DATEN, "neue_pools.json"),
+                          {"stand": time.strftime("%d.%m.%Y %H:%M UTC", time.gmtime()), "pools": treffer})
+                telegram(fruehwarnung.pools_nachricht(treffer))
+            auto = cache["fruehwarnung"].setdefault("auto_kandidaten", [])
+            for t in kand:
+                auto.append({"dex": f"auto: {t['dex']}", "chain": t["chain"], "id": t["id"],
+                             "rpc": t["rpc"], "pools": [t["pool"]]})
+            cache["fruehwarnung"]["auto_kandidaten"] = auto[-15:]
+        except Exception as e:
+            print("Fruehwarnung Pools fehlgeschlagen:", e)
+
     # Kandidaten-DEXe am Vertrag erkunden (nur wenn sich die Liste geaendert hat)
     if konfig.get("erkunden"):
+        konfig["erkunden"] = {**konfig["erkunden"], "kandidaten": konfig["erkunden"]["kandidaten"]
+                              + cache.get("fruehwarnung", {}).get("auto_kandidaten", [])}
         try:
             erk = erkunden.laufen(konfig["erkunden"], cache)
             if erk is not None:
