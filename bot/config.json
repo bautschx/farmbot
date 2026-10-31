@@ -636,7 +636,25 @@
       "pancakeswap",
       "up33",
       "ramses"
-    ]
+    ],
+    "ausgeschlossen": [
+      "Ethereum",
+      "Off Chain",
+      "Tron",
+      "THORChain",
+      "Chainflip",
+      "Mayachain",
+      "Bitcoin",
+      "Near",
+      "Canton",
+      "Provenance",
+      "Spark",
+      "Solana",
+      "Sui",
+      "Aptos",
+      "Ton"
+    ],
+    "_hinweis_ausgeschlossen": "Ethereum wegen Gas (Stefans Vorgabe), Rest ohne EVM-Farmen bzw. ohne Bot-Anbindung"
   },
   "merkl": {
     "_hinweis": "Neue Merkl-Kampagnen fuer Liquiditaet auf unseren Chains, alle 3 h.",
