@@ -20,6 +20,7 @@ import erkunden  # noqa: E402
 import gebuehren  # noqa: E402
 import fruehwarnung  # noqa: E402
 import chainradar  # noqa: E402
+import merkl  # noqa: E402
 
 WURZEL = os.path.dirname(HIER)
 DATEN = os.path.join(WURZEL, "docs", "data")
@@ -173,6 +174,17 @@ def scan(konfig):
                     chainradar.als_gemeldet(cache, erg["neu"])
         except Exception as e:
             print("Chain-Radar fehlgeschlagen:", e)
+
+    # Merkl: neue Belohnungs-Kampagnen auf unseren Chains (alle 3 h)
+    if konfig.get("merkl"):
+        try:
+            mk = merkl.laufen(konfig["merkl"], cache)
+            if mk is not None:
+                speichern(os.path.join(DATEN, "merkl.json"), mk)
+                if mk["neu"] and telegram(merkl.nachricht(mk["neu"])):
+                    merkl.als_gemeldet(cache, mk["neu"])
+        except Exception as e:
+            print("Merkl fehlgeschlagen:", e)
 
     # Fruehwarnung: neue Pools mit viel Handel (alle DEXe), unbekannte DEXe gleich erkunden
     if konfig.get("fruehwarnung"):

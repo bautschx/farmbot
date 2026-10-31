@@ -637,5 +637,20 @@
       "up33",
       "ramses"
     ]
+  },
+  "merkl": {
+    "_hinweis": "Neue Merkl-Kampagnen fuer Liquiditaet auf unseren Chains, alle 3 h.",
+    "abstand_h": 3,
+    "min_usd_tag": 300,
+    "min_tvl_usd": 10000,
+    "chains": {
+      "Robinhood": 4663,
+      "HyperEVM": 999,
+      "Base": 8453,
+      "Arbitrum": 42161,
+      "OP Mainnet": 10,
+      "BNB Chain": 56,
+      "Avalanche": 43114
+    }
   }
 }
