@@ -674,7 +674,8 @@
   "einstieg_links": {
     "_hinweis": "Direkte Einzahlseite je DEX. Platzhalter {pool} {t0} {t1} {fee} (Millionstel, 0,25 % = 2500) {chain_id}. Fehlt eine DEX hier, kommt nur die Startseite aus dex_seiten.",
     "BNB Chain|PancakeSwap": "https://pancakeswap.finance/add/{t0}/{t1}/{fee}?chain=bsc",
-    "Aero": "https://app.aero.xyz/deposit/{chain_id}-{pool_cs}?rewards=aero"
+    "Aero": "https://app.aero.xyz/deposit/{chain_id}-{pool_cs}?rewards=aero",
+    "Avalanche|Blackhole": "https://blackhole.xyz/deposit?token0={t0_cs}&token1={t1_cs}&pair={pool_cs}&type=Concentrated%20Volatile"
   },
   "dex_seiten": {
     "Aero": "https://aero.xyz",
