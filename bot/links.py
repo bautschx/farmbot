@@ -5,11 +5,13 @@ Je Farm/Pool zwei Links:
   ➕ Einsteigen -> Einzahlseite der DEX, wenn eine Vorlage in config.json steht
                   ("einstieg_links"), sonst die Startseite der DEX ("dex_seiten").
 
-Vorlagen koennen {pool}, {t0}, {t1}, {fee} (Gebuehr in Millionstel, 0,25 % = 2500)
+Vorlagen koennen {pool}, {pool_cs} (Pruefsummen-Schreibweise), {t0}, {t1}, {fee} (Gebuehr in Millionstel, 0,25 % = 2500)
 und {chain_id} enthalten. Alles, was hier fehlt, faellt still weg - eine Meldung
 darf an einem Link nie scheitern.
 """
 import html
+
+from keccak import keccak256
 
 DEXSCREENER_NETZ = {
     "Base": "base", "OP Mainnet": "optimism", "Arbitrum": "arbitrum",
@@ -20,6 +22,13 @@ CHAIN_ID = {"Base": 8453, "OP Mainnet": 10, "Arbitrum": 42161, "Robinhood": 4663
             "Avalanche": 43114, "BNB Chain": 56, "HyperEVM": 999}
 
 _konfig = {}
+
+
+def pruefsumme(adr):
+    """Adresse in Gross-/Kleinschreibung nach EIP-55 (wie sie die DEX-Seiten zeigen)."""
+    a = adr.lower().replace("0x", "")
+    h = keccak256(a.encode()).hex()
+    return "0x" + "".join(c.upper() if int(h[i], 16) >= 8 else c for i, c in enumerate(a))
 
 
 def einrichten(konfig):
@@ -44,9 +53,9 @@ def einstieg_url(chain, dex, pool=None, t0=None, t1=None, gebuehr_prozent=None):
     vorlagen = _konfig.get("einstieg_links", {})
     v = vorlagen.get(f"{chain}|{dex}") or vorlagen.get(dex)
     if v:
-        werte = {"pool": pool, "t0": t0, "t1": t1, "chain_id": CHAIN_ID.get(chain),
+        werte = {"pool": pool, "pool_cs": pruefsumme(pool) if pool else None, "t0": t0, "t1": t1, "chain_id": CHAIN_ID.get(chain),
                  "fee": None if gebuehr_prozent is None else int(round(gebuehr_prozent * 10000))}
-        if all(werte.get(k) is not None for k in ("pool", "t0", "t1", "fee", "chain_id") if "{" + k + "}" in v):
+        if all(werte.get(k) is not None for k in ("pool", "pool_cs", "t0", "t1", "fee", "chain_id") if "{" + k + "}" in v):
             return v.format(**werte), True
     seite = _konfig.get("dex_seiten", {}).get(dex)
     return (seite, False) if seite else (None, False)
