@@ -675,13 +675,14 @@
     "_hinweis": "Direkte Einzahlseite je DEX. Platzhalter {pool} {t0} {t1} {fee} (Millionstel, 0,25 % = 2500) {chain_id}. Fehlt eine DEX hier, kommt nur die Startseite aus dex_seiten.",
     "BNB Chain|PancakeSwap": "https://pancakeswap.finance/add/{t0}/{t1}/{fee}?chain=bsc",
     "Aero": "https://app.aero.xyz/deposit/{chain_id}-{pool_cs}?rewards=aero",
-    "Avalanche|Blackhole": "https://blackhole.xyz/deposit?token0={t0_cs}&token1={t1_cs}&pair={pool_cs}&type=Concentrated%20Volatile"
+    "Avalanche|Blackhole": "https://blackhole.xyz/deposit?token0={t0_cs}&token1={t1_cs}&pair={pool_cs}&type=Concentrated%20Volatile",
+    "Avalanche|Pharaoh": "https://www.phar.gg/liquidity/{pool}"
   },
   "dex_seiten": {
     "Aero": "https://aero.xyz",
     "Up33": "https://up33.xyz/liquidity/new",
     "Blackhole": "https://blackhole.xyz",
-    "Pharaoh": "https://pharaoh.exchange",
+    "Pharaoh": "https://www.phar.gg",
     "PancakeSwap": "https://pancakeswap.finance"
   }
 }
