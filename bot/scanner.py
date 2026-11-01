@@ -612,6 +612,7 @@ def scannen(konfig, cache, verlauf):
                 ergebnis.append({
                     "chain": name, "dex": f["dex"], "pool": f["pool"], "gauge": f["gauge"],
                     "paar": f"{tokens[f['t0']]['s']}/{tokens[f['t1']]['s']}",
+                    "t0": f["t0"], "t1": f["t1"],
                     "belohnung": tokens[rt]["s"], "belohnung_adr": rt,
                     "belohnung_preis": preis.get(rt),
                     "belohnung_24h_prozent": None if aend24 is None else round(aend24, 1),

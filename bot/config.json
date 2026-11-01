@@ -670,5 +670,16 @@
       "BNB Chain": 56,
       "Avalanche": 43114
     }
+  },
+  "einstieg_links": {
+    "_hinweis": "Direkte Einzahlseite je DEX. Platzhalter {pool} {t0} {t1} {fee} (Millionstel, 0,25 % = 2500) {chain_id}. Fehlt eine DEX hier, kommt nur die Startseite aus dex_seiten.",
+    "BNB Chain|PancakeSwap": "https://pancakeswap.finance/add/{t0}/{t1}/{fee}?chain=bsc"
+  },
+  "dex_seiten": {
+    "Aero": "https://aero.xyz",
+    "Up33": "https://up33.exchange",
+    "Blackhole": "https://blackhole.xyz",
+    "Pharaoh": "https://pharaoh.exchange",
+    "PancakeSwap": "https://pancakeswap.finance"
   }
 }

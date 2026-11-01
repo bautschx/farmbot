@@ -20,6 +20,7 @@ import time
 import urllib.request
 
 from keccak import keccak256
+import links
 from rpc import Chain, aufruf, als_int, als_adr
 
 URL = "https://api.merkl.xyz/v4/opportunities?status=LIVE&items=100&page={seite}&chainId={chain}&campaigns=true"
@@ -185,6 +186,9 @@ def nachricht(neu):
                       f"\n  ±2 %: {e[2]['apr']} % · ±4 %: {e[4]['apr']} % · ±8 %: {e[8]['apr']} %")
         else:
             zeile += f"\n  Enger Bereich nicht berechenbar ({o.get('eng_fehler', 'kein Pool')}), Merkl ganze TVL: {o['apr_gesamt_tvl']} %"
+        lz = links.zeile(o["chain"], einstieg=o.get("link") or None)
+        if lz:
+            zeile += "\n" + lz
         z.append(zeile)
     return ("🎯 <b>Neue Merkl-Kampagne(n)</b>\n" + "\n".join(z) +
             "\n\nAPR = nur Merkl-Belohnung für 100 $ im Bereich, am Vertrag gerechnet (aktive Liquidität jetzt). "

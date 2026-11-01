@@ -21,6 +21,7 @@ import gebuehren  # noqa: E402
 import fruehwarnung  # noqa: E402
 import chainradar  # noqa: E402
 import merkl  # noqa: E402
+import links  # noqa: E402
 
 WURZEL = os.path.dirname(HIER)
 DATEN = os.path.join(WURZEL, "docs", "data")
@@ -100,6 +101,7 @@ def diagnose(konfig):
 
 
 def scan(konfig):
+    links.einrichten(konfig)
     cache = laden(os.path.join(HIER, "cache.json"), {})
     verlauf = laden(os.path.join(DATEN, "verlauf.json"), {})
     start = time.time()
@@ -125,6 +127,7 @@ def scan(konfig):
     if neu:
         zeilen = [f"• {f['chain']} · {f['dex']} · <b>{f['paar']}</b>: {f['apr']} % "
                   f"(±{f['bereich_prozent']} %), {f['ertrag_tag_usd']} $/Tag, Belohnung {f['belohnung']}"
+                  + (("\n" + links.fuer_farm(f)) if links.fuer_farm(f) else "")
                   for f in neu[:10]]
         mehr = f"\n… und {len(neu) - 10} weitere" if len(neu) > 10 else ""
         text = (f"🌾 <b>{len(neu)} neue Farm(en) bestehen alle Regeln</b>\n" + "\n".join(zeilen) + mehr +
@@ -156,6 +159,7 @@ def scan(konfig):
             if gute and time.time() - st.get("gemeldet_ts", 0) > 20 * 3600:
                 zeilen = [f"• {x['chain']} · {x['dex']} · <b>{x['name']}</b>: ±2 % {x['apr_2']} %, "
                           f"±4 % {x['apr_4']} %, ±8 % {x['apr_8']} % (Kurs 24 h {x.get('preis_aenderung_prozent')} %)"
+                          + (("\n" + links.zeile(x["chain"], pool=x.get("pool"))) if links.zeile(x["chain"], pool=x.get("pool")) else "")
                           for x in gute[:10]]
                 if telegram("💸 <b>Gebühren-Pools über " + str(grenze) + " % (±4 %, letzte 24 h)</b>\n"
                             + "\n".join(zeilen) + "\n\nNur Handelsgebühren, kein Belohnungs-Token. "

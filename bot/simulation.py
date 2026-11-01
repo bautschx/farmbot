@@ -13,6 +13,9 @@ Tausch = halber Positionswert x Poolgebuehr, Verkauf Belohnung 0,3 %, Gas = geme
 x Gas-Einheiten aus config (Annahme, L1-Datenanteil der L2-Chains nicht enthalten).
 Erfahrungswerte: Jeder abgeschlossene Trade wird mit seinen Merkmalen gespeichert.
 """
+
+import links
+
 import math
 
 LOG = math.log(1.0001)
@@ -187,7 +190,8 @@ def laufen(daten, konfig, zustand):
         }
         offen.append(pos)
         ereignisse.append(f"🧪 Rein: {f['paar']} ({f['chain']} · {f['dex']}), "
-                          f"{round(pos['apr_start'] or 0)} % APR bei ±{breite} %, Papiereinsatz {e['einsatz_usd']} $")
+                          f"{round(pos['apr_start'] or 0)} % APR bei ±{breite} %, Papiereinsatz {e['einsatz_usd']} $"
+                          + (("\n" + links.fuer_farm(f)) if links.fuer_farm(f) else ""))
 
     # Kennzahlen fuers Dashboard
     offen_wert = sum(p["wert_usd"] + p["belohnung_usd"] * (1 - e["verkauf_belohnung_prozent"] / 100)

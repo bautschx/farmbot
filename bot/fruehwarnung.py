@@ -14,6 +14,8 @@ import json
 import time
 import urllib.request
 
+import links
+
 FRISCH_H = 72
 GT_NEU = "https://api.geckoterminal.com/api/v2/networks/{net}/new_pools?page={seite}"
 REGEL_NAMEN = {
@@ -59,7 +61,8 @@ def farmen_nachricht(frisch):
         status = "✅ alle Regeln" if f.get("alle_regeln_ok") else ("⚠️ offen: " + ", ".join(offen) if offen else "⚠️ noch nicht alles gemessen")
         zeilen.append(f"• {f['chain']} · {f['dex']} · <b>{f['paar']}</b> (seit {f.get('alter_h')} h): "
                       f"{f['apr']} % bei ±{f['bereich_prozent']} %, {f['ertrag_tag_usd']} $/Tag, "
-                      f"Belohnung {f['belohnung']}, TVL {round((f.get('tvl_usd') or 0) / 1000)}k $\n  {status}")
+                      f"Belohnung {f['belohnung']}, TVL {round((f.get('tvl_usd') or 0) / 1000)}k $\n  {status}"
+                      + (("\n" + links.fuer_farm(f)) if links.fuer_farm(f) else ""))
     return ("🆕 <b>Frische Farm(en) entdeckt</b>\n" + "\n".join(zeilen) +
             "\n\nFrische Farmen haben noch wenige Messpunkte, die Werte schwanken stärker.\n"
             "Dashboard: https://bautschx.github.io/farmbot/")
@@ -118,6 +121,7 @@ def pools_pruefen(einstellung, cache, bekannte_dexe, jetzt=None):
 def pools_nachricht(treffer):
     zeilen = [f"• {t['chain']} · {t['dex']}{'' if t['dex_bekannt'] else ' (neu für uns)'} · <b>{t['name']}</b>: "
               f"TVL {round(t['tvl'] / 1000)}k $, Handel 24 h {round(t['vol24'] / 1000)}k $, seit {t['erstellt'].replace('T', ' ')}"
+              + (("\n" + links.zeile(t["chain"], pool=t.get("pool"))) if links.zeile(t["chain"], pool=t.get("pool")) else "")
               for t in treffer[:12]]
     mehr = f"\n… und {len(treffer) - 12} weitere" if len(treffer) > 12 else ""
     return ("🔥 <b>Neue Pools mit viel Handel</b>\n" + "\n".join(zeilen) + mehr +
