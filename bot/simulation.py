@@ -116,10 +116,12 @@ def laufen(daten, konfig, zustand):
         # Ausstiegsregeln (Regel 4 und Grundregeln); APR erst nach 2 Laeufen in Folge, gegen Messrauschen
         p = f["pruefung"]
         grund = None
+        liq_vorher = pos.get("liq_schwach", 0)
+        pos["liq_schwach"] = liq_vorher + 1 if not p.get("liquiditaet_ok", True) else 0
         if not p.get("preis_ok", True):
             grund = f"Belohnung −{regeln['max_tagesminus_belohnung_prozent']} % in 24 h"
-        elif not p.get("liquiditaet_ok", True):
-            grund = "Regel 2: Belohnung nicht mehr verkaufbar genug"
+        elif not p.get("liquiditaet_ok", True) and liq_vorher >= 1:
+            grund = "Regel 2: Belohnung nicht mehr verkaufbar genug (2 Läufe)"
         elif not p.get("auszahlung_sicher", True):
             grund = "Auszahlung kann einbehalten werden"
         else:
@@ -175,7 +177,7 @@ def laufen(daten, konfig, zustand):
             "start_x0": neu["x0"], "start_x1": neu["x1"], "im_bereich": True,
             "wert_usd": e["einsatz_usd"] - kosten, "gehalten_usd": e["einsatz_usd"] - kosten,
             "belohnung_menge": 0.0, "belohnung_usd": 0.0, "kosten_usd": kosten, "nachgezogen": 0,
-            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "fehlt": 0, "apr_schwach": 0, "trend_schwach": 0,
+            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "fehlt": 0, "apr_schwach": 0, "trend_schwach": 0, "liq_schwach": 0,
             "apr_start": f.get("apr"), "apr_jetzt": f.get("apr"),
             "merkmale": {"bereich_prozent": breite, "bereich_mindest_prozent": f.get("bereich_mindest_prozent"),
                          "gebuehr_prozent": f["gebuehr_prozent"], "tvl_usd": f["tvl_usd"],

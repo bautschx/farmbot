@@ -499,6 +499,18 @@ def scannen(konfig, cache, verlauf):
                          for m in markt if rt in preis
                          for t, b in ((m["t0"], m["b0"]), (m["t1"], m["b1"])) if t == rt)
 
+            # Regel 2 geglaettet (02.11.2026): Aero schreibt schubweise gut, die gemessene
+            # Tagesausschuettung springt dadurch. Mit dem Momentwert fielen alle Base-Farmen
+            # zeitweise unter Faktor 10 (22 von 36 Sim-Ausstiegen). Darum Median der letzten 24 h,
+            # bei gerader Anzahl der hoehere Wert (vorsichtig).
+            emission_jetzt = emission_tag
+            if emission_tag > 0:
+                ek = f"{name}:emission"
+                reihe_e = [x for x in verlauf.get(ek, []) if x[0] > jetzt - 86400] + [[jetzt, emission_tag]]
+                verlauf[ek] = reihe_e
+                werte_e = sorted(x[1] for x in reihe_e)
+                emission_tag = werte_e[len(werte_e) // 2]
+
             # eigener Preisverlauf fuer Regel 4 (Belohnung −30 % in 24 h)
             if rt in preis:
                 schl = f"{name}:{rt}"
@@ -644,6 +656,7 @@ def scannen(konfig, cache, verlauf):
                             "belohnung_preis": preis.get(rt),
                             "belohnung_liquiditaet_usd": round(liq_rt),
                             "ausschuettung_tag_usd": round(emission_tag),
+                            "ausschuettung_tag_jetzt_usd": round(emission_jetzt),
                             "hinweis": dex.get("einbehalt"),
                             "abfragen": chain.abfragen})
             status.append(eintrag)
