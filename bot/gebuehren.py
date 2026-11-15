@@ -12,6 +12,7 @@ werden nur behalten, wenn eine Seite ein Dollar-Token der Chain ist.
 """
 import json
 import time
+import urllib.error
 import urllib.request
 
 from rpc import Chain, aufruf, als_int, als_adr, als_text, RPCFehler
@@ -25,10 +26,34 @@ GT = "https://api.geckoterminal.com/api/v2/networks/{net}/dexes/{dex}/pools?page
 BEREICHE = (2, 4, 8)
 
 
+GT_POOL = "https://api.geckoterminal.com/api/v2/networks/{net}/pools/{pool}"
+
+
 def _gt(url):
     req = urllib.request.Request(url, headers={"user-agent": "farmbot/1.0", "accept": "application/json"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read())
+
+
+def _feste_pools(chain, c):
+    """Pools, die immer gemessen werden (z. B. Stefans eigene Farm), auch wenn sie nicht
+    unter den umsatzstaerksten sind. Kein TVL-Filter, damit die eigene Farm nie wegfaellt."""
+    liste = []
+    for fp in c.get("feste_pools", []):
+        adr = fp["adresse"].lower()
+        eintrag = {"chain": chain, "dex": fp.get("dex", "?"), "pool": adr, "name": fp.get("name", adr[:10]),
+                   "tvl": None, "vol24": None, "fest": True}
+        if fp.get("notiz"):
+            eintrag["notiz"] = fp["notiz"]
+        try:
+            time.sleep(4)
+            a = _gt(GT_POOL.format(net=c["gt_netz"], pool=adr))["data"]["attributes"]
+            eintrag.update({"name": a.get("name") or eintrag["name"], "tvl": round(float(a.get("reserve_in_usd") or 0)),
+                            "vol24": round(float((a.get("volume_usd") or {}).get("h24") or 0))})
+        except Exception as e:
+            print("GeckoTerminal fester Pool", adr, e)
+        liste.append(eintrag)
+    return liste
 
 
 def pools_holen(einstellung, stand, jetzt):
@@ -48,13 +73,20 @@ def pools_holen(einstellung, stand, jetzt):
     liste = []
     for chain, c in einstellung["chains"].items():
         dollar = {d.lower() for d in c["dollar"]}
-        for dex in c["dexe"]:
+        feste = _feste_pools(chain, c)
+        fest = {f["pool"] for f in feste}
+        liste.extend(feste)
+        for dex in c.get("dexe", []):
             daten = None
             for versuch in range(3):
                 time.sleep(4 + 8 * versuch)  # GeckoTerminal erlaubt ca. 30 Abfragen pro Minute
                 try:
                     daten = _gt(GT.format(net=c["gt_netz"], dex=dex)).get("data", [])
                     break
+                except urllib.error.HTTPError as e:
+                    print("GeckoTerminal", dex, e)
+                    if e.code == 404:
+                        break  # DEX-Kennung gibt es nicht, nicht wiederholen
                 except Exception as e:
                     print("GeckoTerminal", dex, e)
             if daten is None:
@@ -71,6 +103,8 @@ def pools_holen(einstellung, stand, jetzt):
                 t0 = rel.get("base_token", {}).get("data", {}).get("id", "").split("_")[-1].lower()
                 t1 = rel.get("quote_token", {}).get("data", {}).get("id", "").split("_")[-1].lower()
                 if t0 not in dollar and t1 not in dollar:
+                    continue
+                if adr.lower() in fest:
                     continue
                 liste.append({"chain": chain, "dex": dex, "pool": adr.lower(), "name": a.get("name", ""),
                               "tvl": round(tvl), "vol24": round(float((a.get("volume_usd") or {}).get("h24") or 0))})

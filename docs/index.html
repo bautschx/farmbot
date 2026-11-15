@@ -82,6 +82,14 @@ h2{font-size:17px;margin:28px 0 10px}
   <tbody id="sim-zu"></tbody>
 </table></div>
 
+<h2>Gebühren-Pools (ohne Belohnungs-Token)</h2>
+<p class="klein" style="margin-top:-4px">Pools ohne Farm, bei denen nur die Handelsgebühren zählen. Gemessen am Gebührenzähler des Pools (feeGrowthGlobal) über die letzten ~24 h, gerechnet für 100 $ im Bereich. „vorläufig“: noch keine 20 h Messverlauf. Gilt nur, solange der Kurs im Bereich bleibt. ★ = fest beobachteter Pool (eigene Farm).</p>
+<div class="tabelle"><table>
+  <thead><tr><th>Chain · DEX</th><th>Paar</th><th class="zahl">APR ±2 %</th><th class="zahl">APR ±4 %</th><th class="zahl">APR ±8 %</th><th class="zahl">Ertrag/Tag ±4 %</th><th class="zahl">Pool-TVL</th><th class="zahl">Volumen 24 h</th><th class="zahl">Kurs im Messfenster</th><th>Pool</th></tr></thead>
+  <tbody id="gebuehren"></tbody>
+</table></div>
+<p class="klein" id="g-stand"></p>
+
 <h2>Angebundene DEXe</h2>
 <div class="tabelle"><table>
   <thead><tr><th>Chain</th><th>DEX</th><th>Stand</th><th class="zahl">Pools</th><th class="zahl">mit Farm</th><th class="zahl">Ausschüttung gemessen</th><th>Belohnung</th><th class="zahl">Liquidität Belohnung</th><th class="zahl">Ausschüttung/Tag</th></tr></thead>
@@ -199,6 +207,28 @@ async function simLaden(){
   }
 }
 simLaden();
+
+async function gebLaden(){
+  let g;
+  const tb = $("gebuehren");
+  try { const r = await fetch("data/gebuehren.json?t=" + Date.now()); if(!r.ok) throw 0; g = await r.json(); }
+  catch(e){ tb.innerHTML = '<tr><td colspan="10" class="leer">Noch keine Gebühren-Messung.</td></tr>'; return; }
+  $("g-stand").textContent = "Stand: " + g.stand;
+  const pools = (g.pools || []).slice().sort((a,b) => (b.fest?1:0)-(a.fest?1:0) || (b.apr_4||0)-(a.apr_4||0));
+  tb.innerHTML = pools.length ? "" : '<tr><td colspan="10" class="leer">Keine Pools gemessen.</td></tr>';
+  for (const p of pools){
+    const tr = document.createElement("tr");
+    const ex = EXPLORER[p.chain];
+    const link = ex ? `<a href="${ex}${p.pool}" target="_blank" rel="noopener">${p.pool.slice(0,8)}…</a>` : p.pool.slice(0,8) + "…";
+    const zusatz = p.fehler ? '<br><span class="klein">⚠ ' + p.fehler + '</span>' : (p.hinweis ? '<br><span class="klein">' + p.hinweis + '</span>' : (p.vorlaeufig ? '<br><span class="klein">vorläufig, ' + p.stunden + ' h</span>' : ''));
+    tr.innerHTML = `<td>${p.chain}<br><span class="klein">${p.dex}</span></td><td>${p.fest?'★ ':''}${p.name}${p.notiz?'<br><span class="klein">'+p.notiz+'</span>':''}${zusatz}</td>
+      <td class="zahl">${pz(p.apr_2)}</td><td class="zahl"><b>${pz(p.apr_4)}</b></td><td class="zahl">${pz(p.apr_8)}</td>
+      <td class="zahl">${usd(p.usd_tag_4,2)}</td><td class="zahl">${usd(p.tvl)}</td><td class="zahl">${usd(p.vol24)}</td>
+      <td class="zahl">${p.preis_aenderung_prozent==null?"–":pz(p.preis_aenderung_prozent,1)}</td><td>${link}</td>`;
+    tb.appendChild(tr);
+  }
+}
+gebLaden();
 </script>
 </body>
 </html>

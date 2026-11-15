@@ -464,7 +464,7 @@
     "version": 2
   },
   "gebuehren": {
-    "_hinweis": "Gebuehren-Ertrag ohne Belohnungs-Token, gemessen am Zaehler feeGrowthGlobal. Pools von GeckoTerminal (umsatzstaerkste je DEX).",
+    "_hinweis": "Gebuehren-Ertrag ohne Belohnungs-Token, gemessen am Zaehler feeGrowthGlobal. Pools von GeckoTerminal (umsatzstaerkste je DEX). feste_pools je Chain: werden immer gemessen (eigene Farm), ohne TVL-Filter.",
     "min_tvl_usd": 20000,
     "pools_je_dex": 8,
     "liste_abstand_h": 20,
@@ -505,6 +505,31 @@
           "ramses-v3-hyperevm",
           "project-x",
           "hybra-finance-v3"
+        ]
+      },
+      "BNB Chain": {
+        "id": 56,
+        "gt_netz": "bsc",
+        "rpc": [
+          "https://bsc-rpc.publicnode.com",
+          "https://bsc.drpc.org",
+          "https://1rpc.io/bnb"
+        ],
+        "dollar": [
+          "0x55d398326f99059ff775485246999027b3197955",
+          "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
+        ],
+        "dexe": [
+          "uniswap-bsc",
+          "pancakeswap-v3-bsc"
+        ],
+        "feste_pools": [
+          {
+            "adresse": "0xcec354f641fb46b977c3a1f18b5caf3e2ede4c2c",
+            "dex": "uniswap-v3-bsc",
+            "name": "USDT / JCT 0.3%",
+            "notiz": "Stefans Farm (seit Nov. 2026)"
+          }
         ]
       }
     }
