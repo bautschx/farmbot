@@ -20,12 +20,16 @@
     "ausstieg_apr_prozent": 200,
     "min_liquiditaet_faktor_emission": 10,
     "max_tagesminus_belohnung_prozent": 30,
-    "max_paar_schwankung_24h_prozent": 30,
+    "max_paar_schwankung_24h_prozent": 15,
     "max_abwaertstrend_24h_prozent": 10,
     "max_abwaertstrend_6h_prozent": 5,
     "min_bereich_prozent": 2,
     "bereich_faktor_schwankung": 0.5,
-    "min_pool_tvl_usd": 20000
+    "min_pool_tvl_usd": 20000,
+    "stablecoin_im_paar_pflicht": true,
+    "ausstieg_liquiditaet_faktor_emission": 5,
+    "ausstieg_liquiditaet_laeufe": 3,
+    "_aenderung_17_11_2026": "Nach Sim-Rueckblick (Stefan): nur Paare mit Stablecoin, Paar-Schwankung max 15 % (vorher 30), Regel 2 mit Puffer: Einstieg ab 10x, Ausstieg erst unter 5x drei Laeufe in Folge (vorher unter 10x zwei Laeufe)."
   },
   "simulation": {
     "_hinweis": "Papierhandel mit echten Chain-Daten. Gas-Einheiten sind Annahmen (noch nicht an echten Transaktionen gemessen), Gaspreis wird je Lauf von der Chain gelesen.",
@@ -178,7 +182,8 @@
         "https://hyperliquid.drpc.org"
       ],
       "dollar": {
-        "0xb88339cb7199b77e23db6e890353e22632ba630f": "USDC"
+        "0xb88339cb7199b77e23db6e890353e22632ba630f": "USDC",
+        "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb": "USD₮0"
       },
       "gas_token": "0x5555555555555555555555555555555555555555",
       "dexe": [

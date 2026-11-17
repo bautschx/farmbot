@@ -618,6 +618,9 @@ def scannen(konfig, cache, verlauf):
                     "paar_ruhig": schwankung is not None and
                         schwankung <= regeln["max_paar_schwankung_24h_prozent"],
                     "kein_abwaertstrend": trend_ok,
+                    # seit 17.11.2026: Paare ohne Stablecoin haben in der Simulation am meisten verloren
+                    "stablecoin_im_paar": not regeln.get("stablecoin_im_paar_pflicht")
+                        or f["t0"] in dollar or f["t1"] in dollar,
                     # DEX kann verdiente Belohnungen nach eigenem Ermessen einbehalten (z. B. Pharaoh)
                     "auszahlung_sicher": not dex.get("einbehalt"),
                 }
@@ -640,6 +643,7 @@ def scannen(konfig, cache, verlauf):
                     "mein_apr": {b: (None if v is None else round(v["apr"], 1)) for b, v in pos.items()},
                     "mein_ertrag_tag_usd": {b: (None if v is None else round(v["tag_usd"], 3))
                                             for b, v in pos.items()},
+                    "liquiditaet_faktor": round(liq_rt / emission_tag, 1) if emission_tag > 0 else None,
                     "pruefung": pruef,
                     "alle_regeln_ok": all(pruef.values()),
                     "gemessen_bis": f["gemessen_bis"],

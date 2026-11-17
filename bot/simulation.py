@@ -116,12 +116,20 @@ def laufen(daten, konfig, zustand):
         # Ausstiegsregeln (Regel 4 und Grundregeln); APR erst nach 2 Laeufen in Folge, gegen Messrauschen
         p = f["pruefung"]
         grund = None
-        liq_vorher = pos.get("liq_schwach", 0)
-        pos["liq_schwach"] = liq_vorher + 1 if not p.get("liquiditaet_ok", True) else 0
+        # Regel 2 mit Puffer (17.11.2026): Einstieg verlangt min_liquiditaet_faktor_emission (10x),
+        # raus erst, wenn der Faktor ausstieg_liquiditaet_laeufe Laeufe in Folge unter
+        # ausstieg_liquiditaet_faktor_emission (5x) liegt. Vorher sprang die Regel um die 10x-Grenze
+        # hin und her (23 Trades, meist nach Stunden wieder raus).
+        faktor = f.get("liquiditaet_faktor")
+        a_grenze = regeln.get("ausstieg_liquiditaet_faktor_emission", regeln["min_liquiditaet_faktor_emission"])
+        a_laeufe = regeln.get("ausstieg_liquiditaet_laeufe", 2)
+        liq_schwach = (faktor is None or faktor < a_grenze) if "liquiditaet_faktor" in f \
+            else not p.get("liquiditaet_ok", True)
+        pos["liq_schwach"] = pos.get("liq_schwach", 0) + 1 if liq_schwach else 0
         if not p.get("preis_ok", True):
             grund = f"Belohnung −{regeln['max_tagesminus_belohnung_prozent']} % in 24 h"
-        elif not p.get("liquiditaet_ok", True) and liq_vorher >= 1:
-            grund = "Regel 2: Belohnung nicht mehr verkaufbar genug (2 Läufe)"
+        elif pos["liq_schwach"] >= a_laeufe:
+            grund = f"Regel 2: Belohnung unter {a_grenze}× Tagesausschüttung ({a_laeufe} Läufe)"
         elif not p.get("auszahlung_sicher", True):
             grund = "Auszahlung kann einbehalten werden"
         else:
