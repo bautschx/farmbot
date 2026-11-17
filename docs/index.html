@@ -105,6 +105,8 @@ h2{font-size:17px;margin:28px 0 10px}
 </main>
 
 <script>
+const CHAIN_ID = {"Base":8453,"OP Mainnet":10,"Arbitrum":42161,"Robinhood":4663,"Avalanche":43114,"BNB Chain":56,"HyperEVM":999};
+const vfat = (chain, pool, gauge) => CHAIN_ID[chain] && pool ? ` · <a href="https://vfat.io/farm?farmId=${encodeURIComponent(CHAIN_ID[chain]+":"+(gauge||pool).toLowerCase()+":"+pool.toLowerCase()+":poolId=:poolIndex=")}" target="_blank" rel="noopener">vfat</a>` : "";
 const EXPLORER = {"Base":"https://basescan.org/address/","OP Mainnet":"https://optimistic.etherscan.io/address/","Arbitrum":"https://arbiscan.io/address/","BNB Chain":"https://bscscan.com/address/","Avalanche":"https://snowtrace.io/address/"};
 const REGELNAMEN = {gebuehr_ok:"Gebühr ≤ 0,3 %",belohnung_nicht_im_paar:"Belohnung nicht im Paar",apr_ok:"APR ≥ 500 %",liquiditaet_ok:"Regel 2: Liquidität",tvl_ok:"Pool groß genug",preis_ok:"Regel 4: Belohnung stabil",preis_bekannt:"Preise ermittelt",paar_ruhig:"Paar ruhig (≤ 15 % in 24 h)",kein_abwaertstrend:"Kein Abwärtstrend",auszahlung_sicher:"Auszahlung nicht einbehaltbar",stablecoin_im_paar:"Stablecoin im Paar"};
 let daten = null;
@@ -135,7 +137,7 @@ function zeichne(){
   for(const f of liste){
     const tr = document.createElement("tr");
     const regeln = Object.entries(f.pruefung).map(([k,v]) => `<span class="marke ${v?"ok":"nein"}">${REGELNAMEN[k]||k}</span>`).join("");
-    const link = EXPLORER[f.chain] ? `<a href="${EXPLORER[f.chain]}${f.pool}" target="_blank" rel="noopener">${f.pool.slice(0,8)}…</a>` : f.pool.slice(0,8)+"…";
+    const link = EXPLORER[f.chain] ? `<a href="${EXPLORER[f.chain]}${f.pool}" target="_blank" rel="noopener">${f.pool.slice(0,8)}…</a>` : f.pool.slice(0,8)+"…" + vfat(f.chain, f.pool, f.gauge);
     const z24 = f.belohnung_24h_prozent;
     tr.innerHTML = `<td>${f.chain}<br><span class="klein">${f.dex}</span></td><td>${f.paar}${trendText(f)}</td>
       <td>${f.belohnung}<br><span class="klein">${f.belohnung_preis!=null?f.belohnung_preis.toPrecision(4)+" $":"Preis unbekannt"}</span></td>
@@ -225,7 +227,7 @@ async function gebLaden(){
   const tm = $("meine"); tm.innerHTML = meine.length ? "" : '<tr><td colspan="10" class="leer">Keine eigene Farm eingetragen.</td></tr>';
   for (const p of meine){
     const ex = EXPLORER[p.chain];
-    const link = ex ? `<a href="${ex}${p.pool}" target="_blank" rel="noopener">${p.pool.slice(0,8)}…</a>` : p.pool.slice(0,8) + "…";
+    const link = ex ? `<a href="${ex}${p.pool}" target="_blank" rel="noopener">${p.pool.slice(0,8)}…</a>` : p.pool.slice(0,8) + "…" + vfat(p.chain, p.pool);
     const zusatz = p.fehler ? '<br><span class="klein">⚠ ' + p.fehler + '</span>' : (p.hinweis ? '<br><span class="klein">' + p.hinweis + '</span>' : (p.vorlaeufig ? '<br><span class="klein">vorläufig, ' + p.stunden + ' h</span>' : ''));
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${p.chain}<br><span class="klein">${p.dex}</span></td><td><b>${p.name}</b>${zusatz}</td>
@@ -239,7 +241,7 @@ async function gebLaden(){
   for (const p of pools){
     const tr = document.createElement("tr");
     const ex = EXPLORER[p.chain];
-    const link = ex ? `<a href="${ex}${p.pool}" target="_blank" rel="noopener">${p.pool.slice(0,8)}…</a>` : p.pool.slice(0,8) + "…";
+    const link = ex ? `<a href="${ex}${p.pool}" target="_blank" rel="noopener">${p.pool.slice(0,8)}…</a>` : p.pool.slice(0,8) + "…" + vfat(p.chain, p.pool);
     const zusatz = p.fehler ? '<br><span class="klein">⚠ ' + p.fehler + '</span>' : (p.hinweis ? '<br><span class="klein">' + p.hinweis + '</span>' : (p.vorlaeufig ? '<br><span class="klein">vorläufig, ' + p.stunden + ' h</span>' : ''));
     tr.innerHTML = `<td>${p.chain}<br><span class="klein">${p.dex}</span></td><td>${p.fest?'★ ':''}${p.name}${p.notiz?'<br><span class="klein">'+p.notiz+'</span>':''}${zusatz}</td>
       <td class="zahl">${pz(p.apr_2)}</td><td class="zahl"><b>${pz(p.apr_4)}</b></td><td class="zahl">${pz(p.apr_8)}</td>

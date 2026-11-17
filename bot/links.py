@@ -10,6 +10,7 @@ und {chain_id} enthalten. Alles, was hier fehlt, faellt still weg - eine Meldung
 darf an einem Link nie scheitern.
 """
 import html
+import urllib.parse
 
 from keccak import keccak256
 
@@ -48,6 +49,16 @@ def chart_url(chain, pool):
     return f"https://dexscreener.com/{netz}/{pool.lower()}"
 
 
+def vfat_url(chain, pool, gauge=None):
+    """Direktlink auf die Farm bei vfat (Schema am 17.11.2026 ueber die vfat-API geprueft:
+    farmId = chainId:gauge:pool:poolId=:poolIndex=, ohne Gauge zweimal der Pool)."""
+    cid = CHAIN_ID.get(chain)
+    if not cid or not pool:
+        return None
+    fid = f"{cid}:{(gauge or pool).lower()}:{pool.lower()}:poolId=:poolIndex="
+    return "https://vfat.io/farm?farmId=" + urllib.parse.quote(fid, safe="")
+
+
 def einstieg_url(chain, dex, pool=None, t0=None, t1=None, gebuehr_prozent=None):
     """(url, direkt) - direkt=False heisst: nur Startseite der DEX."""
     vorlagen = _konfig.get("einstieg_links", {})
@@ -62,9 +73,12 @@ def einstieg_url(chain, dex, pool=None, t0=None, t1=None, gebuehr_prozent=None):
     return (seite, False) if seite else (None, False)
 
 
-def zeile(chain, dex=None, pool=None, t0=None, t1=None, gebuehr_prozent=None, einstieg=None):
+def zeile(chain, dex=None, pool=None, t0=None, t1=None, gebuehr_prozent=None, einstieg=None, gauge=None):
     """Linkzeile fuer Telegram (HTML). einstieg: fertige Einzahl-URL (z. B. von Merkl)."""
     teile = []
+    v = vfat_url(chain, pool, gauge)
+    if v:
+        teile.append(_a(v, "🌾 vfat"))
     c = chart_url(chain, pool)
     if c:
         teile.append(_a(c, "📈 Chart"))
@@ -79,4 +93,4 @@ def zeile(chain, dex=None, pool=None, t0=None, t1=None, gebuehr_prozent=None, ei
 
 def fuer_farm(f):
     return zeile(f.get("chain"), f.get("dex"), f.get("pool"), f.get("t0"), f.get("t1"),
-                 f.get("gebuehr_prozent"))
+                 f.get("gebuehr_prozent"), gauge=f.get("gauge"))
