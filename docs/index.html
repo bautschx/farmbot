@@ -40,6 +40,13 @@ h2{font-size:17px;margin:28px 0 10px}
 <h1>Farmbot</h1>
 <p class="unter" id="stand">Lade Daten …</p>
 
+<h2>Meine Farm</h2>
+<div class="tabelle"><table>
+  <thead><tr><th>Chain · DEX</th><th>Paar</th><th class="zahl">APR ±2 %</th><th class="zahl">APR ±4 %</th><th class="zahl">APR ±8 %</th><th class="zahl">Ertrag/Tag ±8 %</th><th class="zahl">Pool-TVL</th><th class="zahl">Volumen 24 h</th><th class="zahl">Kurs 24 h</th><th>Pool</th></tr></thead>
+  <tbody id="meine"><tr><td colspan="10" class="leer">Lade …</td></tr></tbody>
+</table></div>
+<p class="klein">Nur Handelsgebühren, gemessen am Gebührenzähler des Pools über die letzten ~24 h, gerechnet für 100 $ im Bereich. Gilt nur, solange der Kurs im Bereich bleibt.</p>
+
 <div class="kacheln">
   <div class="kachel"><b id="k-farmen">–</b><span>laufende Farmen gefunden</span></div>
   <div class="kachel"><b id="k-ok">–</b><span>bestehen alle Regeln</span></div>
@@ -214,6 +221,19 @@ async function gebLaden(){
   try { const r = await fetch("data/gebuehren.json?t=" + Date.now()); if(!r.ok) throw 0; g = await r.json(); }
   catch(e){ tb.innerHTML = '<tr><td colspan="10" class="leer">Noch keine Gebühren-Messung.</td></tr>'; return; }
   $("g-stand").textContent = "Stand: " + g.stand;
+  const meine = (g.pools || []).filter(p => p.fest);
+  const tm = $("meine"); tm.innerHTML = meine.length ? "" : '<tr><td colspan="10" class="leer">Keine eigene Farm eingetragen.</td></tr>';
+  for (const p of meine){
+    const ex = EXPLORER[p.chain];
+    const link = ex ? `<a href="${ex}${p.pool}" target="_blank" rel="noopener">${p.pool.slice(0,8)}…</a>` : p.pool.slice(0,8) + "…";
+    const zusatz = p.fehler ? '<br><span class="klein">⚠ ' + p.fehler + '</span>' : (p.hinweis ? '<br><span class="klein">' + p.hinweis + '</span>' : (p.vorlaeufig ? '<br><span class="klein">vorläufig, ' + p.stunden + ' h</span>' : ''));
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.chain}<br><span class="klein">${p.dex}</span></td><td><b>${p.name}</b>${zusatz}</td>
+      <td class="zahl">${pz(p.apr_2)}</td><td class="zahl">${pz(p.apr_4)}</td><td class="zahl"><b>${pz(p.apr_8)}</b></td>
+      <td class="zahl">${usd(p.usd_tag_8,2)}</td><td class="zahl">${usd(p.tvl)}</td><td class="zahl">${usd(p.vol24)}</td>
+      <td class="zahl">${p.preis_aenderung_prozent==null?"–":pz(p.preis_aenderung_prozent,1)}</td><td>${link}</td>`;
+    tm.appendChild(tr);
+  }
   const pools = (g.pools || []).slice().sort((a,b) => (b.fest?1:0)-(a.fest?1:0) || (b.apr_4||0)-(a.apr_4||0));
   tb.innerHTML = pools.length ? "" : '<tr><td colspan="10" class="leer">Keine Pools gemessen.</td></tr>';
   for (const p of pools){
