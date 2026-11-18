@@ -287,13 +287,26 @@ def raus(w, ist, b, router, e, cache):
         w.senden(npm, "0x" + SEL["burn"] + _w(tid), was="Position schließen")
     except Exception as ex:
         print("burn:", ex)
+    in_eth(w, b, router, e, cache)
+
+
+def in_eth(w, b, router, e, cache):
+    """Stefan 18.11.2026: beim Ausstieg alles in den Gastoken ETH, damit nie das Gas ausgeht.
+    Weg: Paar-Token und Belohnung -> USDC (tiefste Pools), dann USDC -> WETH -> ETH."""
     in_usdc(w, b, router, e, cache)
+    m = w.bestand(USDC)
+    if m > 10 ** 5:
+        wp, wts = pool_fuer(w.chain, b["fabrik"], WETH, USDC, cache)
+        tauschen(w, router, USDC, WETH, wts, wp, m, e["toleranz_prozent"])
+    weth = w.bestand(WETH)
+    if weth:
+        w.senden(WETH, "0x" + SEL["wethWithdraw"] + _w(weth), was="WETH in ETH")
 
 
 def in_usdc(w, b, router, e, cache):
     """Alles ausser USDC (Paar-Token, Belohnung) in USDC tauschen."""
     tol = e["toleranz_prozent"]
-    for t in {b["t0"], b["t1"], b["belohnung"]} - {USDC}:
+    for t in {b["t0"], b["t1"], b["belohnung"]} - {USDC, WETH}:
         m = w.bestand(t)
         if not m:
             continue
@@ -315,8 +328,9 @@ def rein(w, b, router, unten, oben, e, cache, max_usd, preise, merken):
     tol = e["toleranz_prozent"]
     eth_preis = preise.get(WETH)
     reserve = int(e["strategie"]["gasreserve_usd"] / eth_preis * 1e18) if eth_preis else 0
-    # ETH ueber der Reserve in USDC
-    ueber = w.eth() - reserve
+    # nur so viel ETH in USDC, wie gebraucht wird (Rest bleibt ETH)
+    bedarf = int(max_usd / eth_preis * 1e18) - int(w.bestand(USDC) / 1e6 / eth_preis * 1e18)
+    ueber = min(w.eth() - reserve, bedarf)
     if ueber > 10 ** 14:
         wp, wts = pool_fuer(w.chain, b["fabrik"], WETH, USDC, cache)
         tauschen(w, router, WETH, USDC, wts, wp, ueber, tol, mit_eth=True)
@@ -410,16 +424,18 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         b, r = info(ist["pool"])
         wert_vorher = zustand.get("wert_usd")
         raus(w, ist, b, r, e, cache)
-        usdc = w.bestand(USDC) / 1e6
-        zustand.setdefault("geschlossen", []).append({**ist, "ende": int(time.time()), "usdc_danach": usdc})
+        usdc = w.eth() / 1e18 * preise[WETH]
+        zustand["eth_nach"] = w.eth() / 1e18
+        zustand.setdefault("geschlossen", []).append({**ist, "ende": int(time.time()), "eth_danach": zustand["eth_nach"],
+                                                       "usd_danach": round(usdc, 2)})
         zustand["position"] = None
         ist = None
         if test:
             zustand["test_abgeschlossen"] = True
-            meldungen.append(f"✅ Bot-Wallet: Testrunde abgeschlossen, {usdc:.2f} USDC zurück. Ab jetzt voller Einsatz.")
+            meldungen.append(f"✅ Bot-Wallet: Testrunde abgeschlossen, Wallet jetzt {zustand['eth_nach']:.5f} ETH (~{usdc:.2f} $). Ab jetzt voller Einsatz.")
             max_usd = e["max_einsatz_usd"]
         else:
-            meldungen.append(f"💰 Bot-Wallet raus: {zustand['geschlossen'][-1].get('paar')}, jetzt {usdc:.2f} USDC")
+            meldungen.append(f"💰 Bot-Wallet raus: {zustand['geschlossen'][-1].get('paar')}, jetzt {zustand['eth_nach']:.5f} ETH")
     if not ist and sp:
         b, r = info(sp["pool"])
         basis = {"pool": sp["pool"], "gauge": b["gauge"], "t0": b["t0"], "t1": b["t1"], "unten": sp["unten"],
