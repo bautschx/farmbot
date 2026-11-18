@@ -230,6 +230,23 @@ def scan(konfig):
             telegram("\n".join(ereignisse) + "\n\nDashboard: https://bautschx.github.io/farmbot/")
         print("Simulation:", zustand.get("kennzahlen"))
 
+    # Echt-Strategie (18.11.2026): genau die Regeln, nach denen die Bot-Wallet handeln soll,
+    # zuerst als Trockenlauf. Eine Farm, ganzer Topf minus Gasreserve, Warteregel, Paarfilter.
+    profil = konfig.get("echt")
+    if profil:
+        import paarfilter
+        top = paarfilter.top_liste(cache, profil["strategie"]["top_n"])
+        pfad = os.path.join(DATEN, "echt.json")
+        zustand = laden(pfad, {})
+        ereignisse = simulation.laufen(daten, konfig, zustand, profil=profil, top=top)
+        zustand["modus"] = "trocken" if not profil.get("live") else "live"
+        speichern(pfad, zustand)
+        speichern(os.path.join(HIER, "cache.json"), cache)
+        if ereignisse:
+            telegram("\n".join(x.replace("🧪", "🎯 Echt-Regeln (Trockenlauf):" if not profil.get("live")
+                                         else "💰 Bot-Wallet:") for x in ereignisse))
+        print("Echt-Strategie:", zustand.get("kennzahlen"))
+
     for d in daten["dexe"]:
         print(d)
     print(f"{len(daten['farmen'])} laufende Farmen, davon "

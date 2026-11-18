@@ -714,5 +714,35 @@
     "Blackhole": "https://blackhole.xyz",
     "Pharaoh": "https://www.phar.gg",
     "PancakeSwap": "https://pancakeswap.finance"
+  },
+  "echt": {
+    "_hinweis": "Stefans Regeln fuer die Bot-Wallet (18.11.2026). live=false: Trockenlauf mit genau diesen Regeln, kein echtes Geld. Ausfuehrung zuerst nur Base/Aero.",
+    "live": false,
+    "positionen": 1,
+    "einsatz_usd": 98,
+    "gas_eroeffnen": 600000,
+    "gas_nachziehen": 900000,
+    "gas_schliessen": 400000,
+    "gas_compound": 700000,
+    "verkauf_belohnung_prozent": 0.3,
+    "sperre_stunden": 24,
+    "strategie": {
+      "chains": [
+        "Base"
+      ],
+      "dexe": [
+        "Aero"
+      ],
+      "topf_start_usd": 100,
+      "gasreserve_usd": 2,
+      "einstieg_apr": 1000,
+      "warten_h_ueber_700": 6,
+      "grenze_kurz": 700,
+      "warten_h_unter_700": 3,
+      "sofort_raus_unter": 500,
+      "compound_ab_prozent": 5,
+      "top_n": 20,
+      "max_kursabweichung_prozent": 5
+    }
   }
 }

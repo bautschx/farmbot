@@ -72,9 +72,35 @@ def _gas(f, einheiten):
     return g * einheiten if g is not None else 0.0
 
 
-def laufen(daten, konfig, zustand):
-    """Ein Simulationsschritt. Aendert zustand, gibt Ereignistexte fuer Telegram zurueck."""
-    e = konfig["simulation"]
+def _apr_frist(pos, apr, st, jetzt):
+    """Warteregel der Echt-Strategie (Stefan, 18.11.2026). Gibt einen Ausstiegsgrund oder None.
+    - APR >= einstieg (1.000 %): alles normal, Fristen zurueckgesetzt
+    - 700-1.000 %: bis zu 6 h warten
+    - 500-700 %: bis zu 3 h warten; diese Frist bleibt, auch wenn der APR danach wieder auf 700-1.000 % steigt
+    - unter 500 %: sofort raus"""
+    if apr >= st["einstieg_apr"]:
+        pos.pop("unter_seit", None)
+        pos.pop("tief_seit", None)
+        return None
+    if apr < st["sofort_raus_unter"]:
+        return f"APR {round(apr)} % unter {st['sofort_raus_unter']} %"
+    pos.setdefault("unter_seit", jetzt)
+    frist = pos["unter_seit"] + st["warten_h_ueber_700"] * 3600
+    if apr < st["grenze_kurz"]:
+        pos.setdefault("tief_seit", jetzt)
+    if pos.get("tief_seit"):
+        frist = min(frist, pos["tief_seit"] + st["warten_h_unter_700"] * 3600)
+    if jetzt >= frist:
+        h = (jetzt - pos["unter_seit"]) / 3600
+        return f"APR seit {h:.1f} h unter {st['einstieg_apr']} % (zuletzt {round(apr)} %)"
+    return None
+
+
+def laufen(daten, konfig, zustand, profil=None, top=None):
+    """Ein Simulationsschritt. Aendert zustand, gibt Ereignistexte fuer Telegram zurueck.
+    profil: anderer Satz Einstellungen (z. B. Echt-Strategie mit Warteregel und Paarfilter)."""
+    e = profil or konfig["simulation"]
+    st = e.get("strategie")
     jetzt = daten["zeit"]
     regeln = konfig["regeln"]
     zustand.setdefault("start", jetzt)
@@ -138,7 +164,9 @@ def laufen(daten, konfig, zustand):
             pos["trend_schwach"] = pos.get("trend_schwach", 0) + 1 if fallend else 0
             if pos["trend_schwach"] >= 2:
                 grund = "Coin im Paar im Abwärtstrend (2 Läufe)"
-        if not grund:
+        if not grund and st:
+            grund = _apr_frist(pos, pos["apr_jetzt"] or 0, st, jetzt)
+        if not grund and not st:
             # Ausstieg erst unter ausstieg_apr_prozent (Regel 4: 200 %), Einstieg verlangt min_apr_prozent (500 %)
             grenze = regeln.get("ausstieg_apr_prozent", regeln["min_apr_prozent"])
             schwach = (pos["apr_jetzt"] or 0) < grenze  # APR im Bereich DIESER Position
@@ -151,6 +179,23 @@ def laufen(daten, konfig, zustand):
             ereignisse.append(f"🧪 Raus: {pos['paar']} ({pos['dex']}) – {grund}. Ergebnis "
                               f"{t['ergebnis_usd']:+.2f} $ nach {t['tage']:.1f} Tagen")
             continue
+
+        # Belohnung nachlegen (Echt-Strategie): ab compound_ab_prozent des Positionswerts
+        # Kosten: Verkauf Belohnung, halber Betrag getauscht, Gas
+        if st and st.get("compound_ab_prozent") and pos["wert_usd"] > 0 and \
+                pos["belohnung_usd"] >= pos["wert_usd"] * st["compound_ab_prozent"] / 100:
+            b = pos["belohnung_usd"]
+            kosten = b * e["verkauf_belohnung_prozent"] / 100 + b * 0.5 * f["gebuehr_prozent"] / 100 \
+                + _gas(f, e.get("gas_compound", e["gas_nachziehen"]))
+            neu = _eroeffnen(sim, pos["wert_usd"] + b - kosten, pos["bereich"]) if b > kosten else None
+            if neu:
+                pos.update({"unten": neu["unten"], "oben": neu["oben"], "L": neu["L"]})
+                pos["wert_usd"] += b - kosten
+                pos["kosten_usd"] += kosten
+                pos["nachgelegt_usd"] = pos.get("nachgelegt_usd", 0) + b
+                pos["belohnung_menge"] = 0.0
+                pos["belohnung_usd"] = 0.0
+                pos["compounds"] = pos.get("compounds", 0) + 1
 
         # aus dem Bereich: nachziehen (auf den aktuellen Kurs, mit dem jetzt empfohlenen Bereich)
         if not im_bereich:
@@ -170,10 +215,29 @@ def laufen(daten, konfig, zustand):
         del sperre[k]
     kandidaten = [f for f in daten["farmen"] if f["alle_regeln_ok"] and _brauchbar(f) and f.get("bereich_prozent")
                   and (f["chain"], f["pool"]) not in belegt and f"{f['chain']}|{f['pool']}" not in sperre]
+    if st:
+        import paarfilter
+        dollar = {c: set(v["dollar"]) for c, v in konfig["chains"].items()}
+        geeignet = []
+        for f in kandidaten:
+            if f["chain"] not in st["chains"] or f["dex"] not in st["dexe"]:
+                continue
+            if (f.get("apr") or 0) < st["einstieg_apr"]:
+                continue
+            ok, art = paarfilter.erlaubt(f, dollar.get(f["chain"], set()), top or {}, st["max_kursabweichung_prozent"])
+            if ok:
+                f = {**f, "paarart": art}
+                geeignet.append(f)
+        kandidaten = geeignet
     kandidaten.sort(key=lambda f: -(f.get("apr") or 0))
     for f in kandidaten[:max(0, e["positionen"] - len(offen))]:
         sim = f["sim"]
         breite = f["bereich_prozent"]
+        if st:  # ganzer Topf (Ergebnis der letzten Trades eingerechnet) minus Gasreserve
+            topf = st["topf_start_usd"] + sum(t["ergebnis_usd"] for t in buch)
+            e = {**e, "einsatz_usd": round(topf - st["gasreserve_usd"], 2)}
+            if e["einsatz_usd"] <= 5:
+                break
         kosten = e["einsatz_usd"] * 0.5 * f["gebuehr_prozent"] / 100 + _gas(f, e["gas_eroeffnen"])
         neu = _eroeffnen(sim, e["einsatz_usd"] - kosten, breite)
         if not neu:
@@ -185,7 +249,7 @@ def laufen(daten, konfig, zustand):
             "start_x0": neu["x0"], "start_x1": neu["x1"], "im_bereich": True,
             "wert_usd": e["einsatz_usd"] - kosten, "gehalten_usd": e["einsatz_usd"] - kosten,
             "belohnung_menge": 0.0, "belohnung_usd": 0.0, "kosten_usd": kosten, "nachgezogen": 0,
-            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "fehlt": 0, "apr_schwach": 0, "trend_schwach": 0, "liq_schwach": 0,
+            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "paarart": f.get("paarart"), "fehlt": 0, "apr_schwach": 0, "trend_schwach": 0, "liq_schwach": 0,
             "apr_start": f.get("apr"), "apr_jetzt": f.get("apr"),
             "merkmale": {"bereich_prozent": breite, "bereich_mindest_prozent": f.get("bereich_mindest_prozent"),
                          "gebuehr_prozent": f["gebuehr_prozent"], "tvl_usd": f["tvl_usd"],
@@ -234,7 +298,8 @@ def _schliessen(pos, f, jetzt, grund, offen, buch, sperre, e):
         "belohnung_usd": round(belohnung_netto, 2),
         "kurseffekt_usd": round(pos["wert_usd"] + pos["kosten_usd"] - pos["einsatz_usd"], 2),
         "il_usd": round(pos["wert_usd"] - pos["gehalten_usd"], 2),
-        "kosten_usd": round(kosten, 2), "nachgezogen": pos["nachgezogen"], "bereich_prozent": pos["bereich"],
+        "kosten_usd": round(kosten, 2), "nachgezogen": pos["nachgezogen"], "compounds": pos.get("compounds", 0),
+        "paarart": pos.get("paarart"), "bereich_prozent": pos["bereich"],
         "im_bereich_prozent": round(pos["zeit_im_bereich_s"] / max(pos["laufzeit_s"], 1) * 100, 1),
         "apr_start": pos["apr_start"], "apr_ende": pos.get("apr_jetzt"),
         "apr_real_prozent": round((ende / pos["einsatz_usd"] - 1) * 100 / tage * 365, 1),
