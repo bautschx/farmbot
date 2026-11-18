@@ -53,14 +53,36 @@ def _sqrt_tick(t):
 
 # ---------------------------------------------------------------- Lesen / Erkunden
 
+def _versuch(chain, ziel, sel, *args):
+    try:
+        return chain.call(ziel, aufruf(sel, *args))
+    except Exception:
+        return None
+
+
+def sonde(chain, f):
+    """Fuer die Pruefung: jeden Leseaufruf einzeln, mit Ergebnis oder None."""
+    pool, gauge = f["pool"], f["gauge"]
+    r = {}
+    for name, ziel, sel in [("gauge.nft", gauge, "47ccca02"), ("pool.nft", pool, "47ccca02"),
+                            ("pool.factory", pool, "c45a0155"), ("pool.gauge", pool, "a6f19c84"),
+                            ("gauge.rewardToken", gauge, "f7c618c1"), ("gauge.pool", gauge, "16f0115b"),
+                            ("gauge.voter", gauge, "46c96aac"), ("pool.tickSpacing", pool, "d0c93a7c")]:
+        v = _versuch(chain, ziel, sel)
+        r[name] = None if v is None else (als_adr(v) if "tickSpacing" not in name else als_int(v, signed=True))
+    return r
+
+
 def basis_lesen(chain, f, bot):
     """Liest alle Adressen fuer eine Farm direkt an der Chain."""
     pool, gauge = f["pool"], f["gauge"]
-    npm = als_adr(chain.call(gauge, aufruf(SEL["nft"])))
+    npm = als_adr(_versuch(chain, gauge, SEL["nft"]) or _versuch(chain, pool, SEL["nft"]))
+    if not npm:
+        raise RuntimeError("Positionsvertrag (nft) weder am Gauge noch am Pool lesbar")
     fabrik = als_adr(chain.call(pool, aufruf(SEL["factory"])))
     ts = als_int(chain.call(pool, aufruf(SEL["tickSpacing"])), signed=True)
-    belohnung = als_adr(chain.call(gauge, aufruf(SEL["rewardToken"])))
-    npm_fabrik = als_adr(chain.call(npm, aufruf(SEL["factory"])))
+    belohnung = als_adr(_versuch(chain, gauge, SEL["rewardToken"])) or f.get("belohnung_adr")
+    npm_fabrik = als_adr(_versuch(chain, npm, SEL["factory"]))
     return {"pool": pool, "gauge": gauge, "npm": npm, "fabrik": fabrik, "npm_fabrik": npm_fabrik,
             "ts": ts, "belohnung": belohnung, "t0": f["t0"], "t1": f["t1"]}
 
@@ -139,7 +161,11 @@ def pruefen(konfig, daten, cache, bot):
     except Exception as ex:
         out["eth_fehler"] = str(ex)
     for f in kand[:3]:
-        r = {"paar": f["paar"], "pool": f["pool"]}
+        r = {"paar": f["paar"], "pool": f["pool"], "gauge": f["gauge"]}
+        try:
+            r["sonde"] = sonde(chain, f)
+        except Exception as ex:
+            r["sonde_fehler"] = str(ex)[:200]
         try:
             b = basis_lesen(chain, f, bot)
             r.update(b)
