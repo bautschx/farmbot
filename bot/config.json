@@ -716,8 +716,8 @@
     "PancakeSwap": "https://pancakeswap.finance"
   },
   "echt": {
-    "_hinweis": "Stefans Regeln fuer die Bot-Wallet (18.11.2026). live=false: Trockenlauf mit genau diesen Regeln, kein echtes Geld. Ausfuehrung zuerst nur Base/Aero.",
-    "live": false,
+    "_hinweis": "Stefans Regeln fuer die Bot-Wallet (18.11.2026). live=true: handelt echt, sobald das Geheimnis BOT_KEY gesetzt ist. Erste Runde nur test_einsatz_usd fuer test_dauer_h, dann voller Einsatz. Nur Base/Aero.",
+    "live": true,
     "positionen": 1,
     "einsatz_usd": 98,
     "gas_eroeffnen": 600000,
