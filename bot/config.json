@@ -743,6 +743,12 @@
       "compound_ab_prozent": 5,
       "top_n": 20,
       "max_kursabweichung_prozent": 5
-    }
+    },
+    "bot_adresse": "0x228561ca396631b51b63369c882fd6c7f7f2e9fd",
+    "max_einsatz_usd": 100,
+    "test_einsatz_usd": 5,
+    "test_dauer_h": 1,
+    "toleranz_prozent": 1,
+    "sperre_bloecke": 160
   }
 }

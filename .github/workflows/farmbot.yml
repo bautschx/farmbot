@@ -27,8 +27,11 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Bibliothek zum Signieren
+        run: pip install --quiet "eth-account>=0.13,<0.14"
       - name: Bot ausfuehren
         env:
+          BOT_KEY: ${{ secrets.BOT_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python bot/main.py "${{ inputs.modus || 'scan' }}"

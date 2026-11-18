@@ -247,6 +247,29 @@ def scan(konfig):
                                          else "💰 Bot-Wallet:") for x in ereignisse))
         print("Echt-Strategie:", zustand.get("kennzahlen"))
 
+        # Bot-Wallet: echte Ausfuehrung (nur mit echt.live = true und Geheimnis BOT_KEY)
+        import ausfuehrung
+        schluessel = os.environ.get("BOT_KEY")
+        wpfad = os.path.join(DATEN, "bot_wallet.json")
+        wzustand = laden(wpfad, {})
+        if profil.get("live") and schluessel:
+            try:
+                for m in ausfuehrung.schritt(konfig, daten, zustand, cache, wzustand, schluessel):
+                    telegram(m)
+            except Exception as ex:
+                wzustand.setdefault("fehler", []).append({"zeit": int(time.time()), "text": str(ex)[:300]})
+                wzustand["fehler"] = wzustand["fehler"][-20:]
+                telegram(f"⚠️ Bot-Wallet Fehler: {str(ex)[:300]}")
+                print("Bot-Wallet Fehler:", ex)
+        else:
+            try:
+                wzustand["pruefung"] = ausfuehrung.pruefen(konfig, daten, cache, profil["bot_adresse"])
+                print("Bot-Wallet Prüfung:", json.dumps(wzustand["pruefung"])[:1500])
+            except Exception as ex:
+                print("Bot-Wallet Prüfung fehlgeschlagen:", ex)
+        speichern(wpfad, wzustand)
+        speichern(os.path.join(HIER, "cache.json"), cache)
+
     for d in daten["dexe"]:
         print(d)
     print(f"{len(daten['farmen'])} laufende Farmen, davon "
