@@ -409,6 +409,19 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
             raise RuntimeError("kein passender Router gefunden")
         return b, r
 
+    # Gehoert die Position noch dem Bot? (Stefan hat sie am 18.11. in vfat uebernommen und dort beendet;
+    # danach lief jeder Ausstieg in "NA"-Fehler.) Wenn nicht: Position vergessen statt endlos Fehler melden.
+    if ist:
+        npm = als_adr(_versuch(chain, ist["gauge"], SEL["nft"]))
+        eigner = als_adr(_versuch(chain, npm, SEL["ownerOf"], ist["token_id"])) if npm else None
+        meins = eigner == w.adr or (eigner == ist["gauge"].lower() and
+                                    als_int(_versuch(chain, ist["gauge"], "c69deec5", w.adr, ist["token_id"])) == 1)
+        if not meins:
+            zustand.setdefault("geschlossen", []).append({**ist, "ende": int(time.time()), "grund": "nicht mehr in Bot-Hand"})
+            zustand["position"] = None
+            ist = None
+            meldungen.append("ℹ️ Bot-Wallet: Position gehört nicht mehr dem Bot (von Hand beendet/übernommen), wird vergessen")
+
     aendern = False
     if ist:
         if not sp or sp["pool"] != ist["pool"] or sp["unten"] != ist["unten"] or sp["oben"] != ist["oben"]:
