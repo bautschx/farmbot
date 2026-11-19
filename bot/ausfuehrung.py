@@ -373,6 +373,10 @@ def rein(w, b, router, unten, oben, e, cache, max_usd, preise, merken):
 
 # ---------------------------------------------------------------- Hauptschritt
 
+def _apr_txt(x):
+    return f"{round(x):,}".replace(",", ".") + " %" if x is not None else "?"
+
+
 def schritt(konfig, daten, soll, cache, zustand, schluessel):
     """Gleicht die Wallet an den Soll-Zustand (Profil echt) an. Gibt Meldungen zurueck."""
     e = konfig["echt"]
@@ -448,7 +452,9 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
             meldungen.append(f"✅ Bot-Wallet: Testrunde abgeschlossen, Wallet jetzt {zustand['eth_nach']:.5f} ETH (~{usdc:.2f} $). Ab jetzt voller Einsatz.")
             max_usd = e["max_einsatz_usd"]
         else:
-            meldungen.append(f"💰 Bot-Wallet raus: {zustand['geschlossen'][-1].get('paar')}, jetzt {zustand['eth_nach']:.5f} ETH")
+            letzte = (soll.get("geschlossen") or [{}])[-1]
+            zustand["raus_info"] = {"paar": zustand["geschlossen"][-1].get("paar"), "grund": letzte.get("grund"),
+                                    "eth": zustand["eth_nach"], "usd": round(usdc, 2)}
     if not ist and sp:
         b, r = info(sp["pool"])
         basis = {"pool": sp["pool"], "gauge": b["gauge"], "t0": b["t0"], "t1": b["t1"], "unten": sp["unten"],
@@ -458,7 +464,16 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         zustand["position"] = {**neu, "pool": sp["pool"], "gauge": b["gauge"], "t0": b["t0"], "t1": b["t1"],
                                "unten": sp["unten"], "oben": sp["oben"], "paar": sp["paar"],
                                "compounds": sp.get("compounds", 0), "start": int(time.time())}
-        meldungen.append(f"💰 Bot-Wallet rein: {sp['paar']} (Base · Aero)" + (" – Testrunde mit kleinem Betrag" if test else ""))
+        ri = zustand.pop("raus_info", None)
+        rein_txt = f"<b>{sp['paar']}</b> (Base · Aero) mit {_apr_txt(sp.get('apr_start'))} APR bei ±{sp.get('bereich_prozent')} %"
+        if ri:
+            meldungen.append(f"🔄 Bot-Wallet gewechselt: {ri['paar']} → {rein_txt}\nGrund: {ri.get('grund')}")
+        else:
+            meldungen.append("💰 Bot-Wallet rein: " + rein_txt + (" – Testrunde mit kleinem Betrag" if test else ""))
+    elif zustand.get("raus_info"):
+        ri = zustand.pop("raus_info")
+        meldungen.append(f"💰 Bot-Wallet raus: {ri['paar']} ({ri.get('grund')}). Keine Farm über "
+                         f"{e['strategie']['einstieg_apr']} %, wartet in ETH: {ri['eth']:.5f} ETH (~{ri['usd']} $)")
     # Kennzahlen
     try:
         zustand["eth"] = w.eth() / 1e18

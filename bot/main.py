@@ -41,8 +41,15 @@ def speichern(pfad, inhalt):
         json.dump(inhalt, f, ensure_ascii=False, separators=(",", ":"))
 
 
-def telegram(text):
-    """Schickt eine Nachricht. Rueckgabe True, wenn Telegram sie angenommen hat."""
+NUR_WICHTIG = False  # Stefan 19.11.2026: nur noch Bot-Wallet-Meldungen und Ausnahme-Farmen
+
+
+def telegram(text, wichtig=False):
+    """Schickt eine Nachricht. Rueckgabe True, wenn Telegram sie angenommen hat.
+    Ist NUR_WICHTIG gesetzt, gehen nur Nachrichten mit wichtig=True raus (der Rest landet im Protokoll)."""
+    if NUR_WICHTIG and not wichtig:
+        print("Telegram (nicht gesendet, nur Protokoll):", text[:200].replace("\n", " | "))
+        return True
     token, chat = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
     if not token or not chat:
         print("Telegram: Geheimnisse fehlen")
@@ -124,15 +131,21 @@ def scan(konfig):
         cache["gemeldet"], cache["gemeldet_version"] = [], 2
     gemeldet = set(cache.get("gemeldet", []))
     neu = [f for f in daten["farmen"] if f["alle_regeln_ok"] and f["gauge"] not in gemeldet]
+    grenze_aus = (konfig.get("meldungen") or {}).get("ausnahme_apr")
+    if NUR_WICHTIG and grenze_aus:
+        gemeldet.update(f["gauge"] for f in neu if (f.get("apr") or 0) < grenze_aus)
+        neu = [f for f in neu if (f.get("apr") or 0) >= grenze_aus]
     if neu:
         zeilen = [f"• {f['chain']} · {f['dex']} · <b>{f['paar']}</b>: {f['apr']} % "
                   f"(±{f['bereich_prozent']} %), {f['ertrag_tag_usd']} $/Tag, Belohnung {f['belohnung']}"
                   + (("\n" + links.fuer_farm(f)) if links.fuer_farm(f) else "")
                   for f in neu[:10]]
         mehr = f"\n… und {len(neu) - 10} weitere" if len(neu) > 10 else ""
-        text = (f"🌾 <b>{len(neu)} neue Farm(en) bestehen alle Regeln</b>\n" + "\n".join(zeilen) + mehr +
+        kopf = (f"🚀 <b>Außergewöhnliche Farm(en) ab {grenze_aus} % APR</b>" if NUR_WICHTIG and grenze_aus
+                else f"🌾 <b>{len(neu)} neue Farm(en) bestehen alle Regeln</b>")
+        text = (kopf + "\n" + "\n".join(zeilen) + mehr +
                 "\n\nDashboard: https://bautschx.github.io/farmbot/")
-        if telegram(text):
+        if telegram(text, wichtig=True):
             gemeldet.update(f["gauge"] for f in neu)
     cache["gemeldet"] = sorted(gemeldet)
 
@@ -221,7 +234,7 @@ def scan(konfig):
     speichern(os.path.join(HIER, "cache.json"), cache)
 
     # Simulation (Papierhandel) mit den Daten dieses Laufs weiterrechnen
-    if konfig.get("simulation"):
+    if konfig.get("simulation") and konfig["simulation"].get("aktiv", True):
         pfad = os.path.join(DATEN, "simulation.json")
         zustand = laden(pfad, {})
         ereignisse = simulation.laufen(daten, konfig, zustand)
@@ -242,9 +255,8 @@ def scan(konfig):
         zustand["modus"] = "trocken" if not profil.get("live") else "live"
         speichern(pfad, zustand)
         speichern(os.path.join(HIER, "cache.json"), cache)
-        if ereignisse:
-            telegram("\n".join(x.replace("🧪", "🎯 Echt-Regeln (Trockenlauf):" if not profil.get("live")
-                                         else "💰 Bot-Wallet:") for x in ereignisse))
+        if ereignisse and not profil.get("live"):  # im Echtbetrieb meldet die Ausfuehrung selbst
+            telegram("\n".join(x.replace("🧪", "🎯 Echt-Regeln (Trockenlauf):") for x in ereignisse))
         print("Echt-Strategie:", zustand.get("kennzahlen"))
 
         # Bot-Wallet: echte Ausfuehrung (nur mit echt.live = true und Geheimnis BOT_KEY)
@@ -255,11 +267,11 @@ def scan(konfig):
         if profil.get("live") and schluessel:
             try:
                 for m in ausfuehrung.schritt(konfig, daten, zustand, cache, wzustand, schluessel):
-                    telegram(m)
+                    telegram(m, wichtig=True)
             except Exception as ex:
                 wzustand.setdefault("fehler", []).append({"zeit": int(time.time()), "text": str(ex)[:300]})
                 wzustand["fehler"] = wzustand["fehler"][-20:]
-                telegram(f"⚠️ Bot-Wallet Fehler: {str(ex)[:300]}")
+                telegram(f"⚠️ Bot-Wallet Fehler: {str(ex)[:300]}", wichtig=True)
                 print("Bot-Wallet Fehler:", ex)
         else:
             try:
@@ -278,11 +290,12 @@ def scan(konfig):
 
 if __name__ == "__main__":
     konfig = laden(os.path.join(HIER, "config.json"), None)
+    NUR_WICHTIG = bool((konfig.get("meldungen") or {}).get("nur_bot_wallet"))
     modus = sys.argv[1] if len(sys.argv) > 1 else "scan"
     if modus == "diagnose":
         diagnose(konfig)
     elif modus == "telegramtest":
-        ok = telegram("✅ <b>Farmbot ist verbunden.</b>\nAb jetzt kommen hier Meldungen zu neuen Farmen, "
+        ok = telegram(wichtig=True, text="✅ <b>Farmbot ist verbunden.</b>\nAb jetzt kommen hier Meldungen zu neuen Farmen, "
                       "die alle deine Regeln bestehen.\nDashboard: https://bautschx.github.io/farmbot/")
         sys.exit(0 if ok else 1)
     else:
