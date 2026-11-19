@@ -725,7 +725,7 @@
     "gas_schliessen": 400000,
     "gas_compound": 700000,
     "verkauf_belohnung_prozent": 0.3,
-    "sperre_stunden": 24,
+    "sperre_stunden": 0,
     "strategie": {
       "chains": [
         "Base"
