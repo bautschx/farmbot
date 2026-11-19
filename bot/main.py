@@ -134,7 +134,9 @@ def scan(konfig):
     grenze_aus = (konfig.get("meldungen") or {}).get("ausnahme_apr")
     if NUR_WICHTIG and grenze_aus:
         gemeldet.update(f["gauge"] for f in neu if (f.get("apr") or 0) < grenze_aus)
-        neu = [f for f in neu if (f.get("apr") or 0) >= grenze_aus]
+        # Base/Aero-Farmen fragt die Bot-Wallet selbst mit Ja/Nein-Knopf (rueckfrage.py)
+        neu = [f for f in neu if (f.get("apr") or 0) >= grenze_aus
+               and not (f["chain"] == "Base" and f["dex"] == "Aero")]
     if neu:
         zeilen = [f"• {f['chain']} · {f['dex']} · <b>{f['paar']}</b>: {f['apr']} % "
                   f"(±{f['bereich_prozent']} %), {f['ertrag_tag_usd']} $/Tag, Belohnung {f['belohnung']}"
@@ -251,7 +253,18 @@ def scan(konfig):
         top = paarfilter.top_liste(cache, profil["strategie"]["top_n"])
         pfad = os.path.join(DATEN, "echt.json")
         zustand = laden(pfad, {})
+        import rueckfrage
+        if profil.get("live"):
+            try:
+                print("Rückfrage-Antworten:", rueckfrage.antworten_holen(cache, zustand))
+            except Exception as ex:
+                print("Rückfrage-Antworten fehlgeschlagen:", ex)
         ereignisse = simulation.laufen(daten, konfig, zustand, profil=profil, top=top)
+        if profil.get("live"):
+            try:
+                rueckfrage.fragen(daten, konfig, cache, zustand, top)
+            except Exception as ex:
+                print("Rückfrage fehlgeschlagen:", ex)
         zustand["modus"] = "trocken" if not profil.get("live") else "live"
         speichern(pfad, zustand)
         speichern(os.path.join(HIER, "cache.json"), cache)

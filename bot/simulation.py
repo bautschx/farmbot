@@ -78,7 +78,8 @@ def _apr_frist(pos, apr, st, jetzt):
     - 700-1.000 %: bis zu 6 h warten
     - 500-700 %: bis zu 3 h warten; diese Frist bleibt, auch wenn der APR danach wieder auf 700-1.000 % steigt
     - unter 500 %: sofort raus"""
-    if apr >= st["einstieg_apr"]:
+    ref = pos.get("einstieg_ref") or st["einstieg_apr"]
+    if apr >= ref:
         pos.pop("unter_seit", None)
         pos.pop("tief_seit", None)
         return None
@@ -92,7 +93,7 @@ def _apr_frist(pos, apr, st, jetzt):
         frist = min(frist, pos["tief_seit"] + st["warten_h_unter_700"] * 3600)
     if jetzt >= frist:
         h = (jetzt - pos["unter_seit"]) / 3600
-        return f"APR seit {h:.1f} h unter {st['einstieg_apr']} % (zuletzt {round(apr)} %)"
+        return f"APR seit {h:.1f} h unter {round(ref)} % (zuletzt {round(apr)} %)"
     return None
 
 
@@ -166,6 +167,10 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
                 grund = "Coin im Paar im Abwärtstrend (2 Läufe)"
         if not grund and st:
             grund = _apr_frist(pos, pos["apr_jetzt"] or 0, st, jetzt)
+        if not grund and st:
+            fg = {k: v for k, v in zustand.get("freigaben", {}).items() if v["bis"] > jetzt and k != pos["pool"]}
+            if fg:
+                grund = "von Stefan per Telegram freigegebener Wechsel"
         if not grund and not st:
             # Ausstieg erst unter ausstieg_apr_prozent (Regel 4: 200 %), Einstieg verlangt min_apr_prozent (500 %)
             grenze = regeln.get("ausstieg_apr_prozent", regeln["min_apr_prozent"])
@@ -219,8 +224,13 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
         import paarfilter
         dollar = {c: set(v["dollar"]) for c, v in konfig["chains"].items()}
         geeignet = []
+        freigaben = {k: v for k, v in zustand.get("freigaben", {}).items() if v["bis"] > jetzt}
+        zustand["freigaben"] = freigaben
         for f in kandidaten:
             if f["chain"] not in st["chains"] or f["dex"] not in st["dexe"]:
+                continue
+            if f["pool"] in freigaben:
+                geeignet.append({**f, "paarart": "freigegeben", "freigabe": True})
                 continue
             if (f.get("apr") or 0) < st["einstieg_apr"]:
                 continue
@@ -229,7 +239,7 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
                 f = {**f, "paarart": art}
                 geeignet.append(f)
         kandidaten = geeignet
-    kandidaten.sort(key=lambda f: -(f.get("apr") or 0))
+    kandidaten.sort(key=lambda f: (not f.get("freigabe"), -(f.get("apr") or 0)))
     for f in kandidaten[:max(0, e["positionen"] - len(offen))]:
         sim = f["sim"]
         breite = f["bereich_prozent"]
@@ -249,7 +259,8 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
             "start_x0": neu["x0"], "start_x1": neu["x1"], "im_bereich": True,
             "wert_usd": e["einsatz_usd"] - kosten, "gehalten_usd": e["einsatz_usd"] - kosten,
             "belohnung_menge": 0.0, "belohnung_usd": 0.0, "kosten_usd": kosten, "nachgezogen": 0,
-            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "paarart": f.get("paarart"), "fehlt": 0, "apr_schwach": 0, "trend_schwach": 0, "liq_schwach": 0,
+            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "paarart": f.get("paarart"),
+            "einstieg_ref": min(st["einstieg_apr"], f.get("apr") or 0) if (st and f.get("freigabe")) else None, "fehlt": 0, "apr_schwach": 0, "trend_schwach": 0, "liq_schwach": 0,
             "apr_start": f.get("apr"), "apr_jetzt": f.get("apr"),
             "merkmale": {"bereich_prozent": breite, "bereich_mindest_prozent": f.get("bereich_mindest_prozent"),
                          "gebuehr_prozent": f["gebuehr_prozent"], "tvl_usd": f["tvl_usd"],
@@ -262,6 +273,8 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
             "letzte": {k: sim[k] for k in ("p0", "p1", "d0", "d1")},
             "letzter_belohnungspreis": f["belohnung_preis"],
         }
+        if f.get("freigabe"):
+            zustand.get("freigaben", {}).pop(f["pool"], None)
         offen.append(pos)
         ereignisse.append(f"🧪 Rein: {f['paar']} ({f['chain']} · {f['dex']}), "
                           f"{round(pos['apr_start'] or 0)} % APR bei ±{breite} %, Papiereinsatz {e['einsatz_usd']} $"

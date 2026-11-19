@@ -750,11 +750,20 @@
     "test_einsatz_usd": 5,
     "test_dauer_h": 1,
     "toleranz_prozent": 1,
-    "sperre_bloecke": 160
+    "sperre_bloecke": 160,
+    "rueckfrage": {
+      "_hinweis": "Stefan 19.11.2026: Ja/Nein-Knopf in Telegram bei Farmen knapp unter der Einstiegsgrenze (nur wenn die Wallet frei ist) und bei aussergewoehnlichen Farmen ab ausnahme_apr.",
+      "aktiv": true,
+      "puffer_ab_apr": 900,
+      "ausnahme_apr": 2000,
+      "frage_pause_stunden": 12,
+      "frage_gueltig_stunden": 6,
+      "freigabe_stunden": 2
+    }
   },
   "meldungen": {
     "_hinweis": "Stefan 19.11.2026: Telegram nur noch fuer Bot-Wallet (rein/raus/Wechsel mit Grund und APR, Fehler) und aussergewoehnliche Farmen ab ausnahme_apr, die alle Regeln bestehen.",
     "nur_bot_wallet": true,
-    "ausnahme_apr": 5000
+    "ausnahme_apr": 2000
   }
 }
