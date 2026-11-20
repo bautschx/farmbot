@@ -115,7 +115,11 @@ def router_finden(chain, pool, fabrik, bot, cache, weth=WETH):
         if len(lg.get("topics", [])) > 1:
             s = "0x" + lg["topics"][1][-40:]
             ziele[s] = ziele.get(s, 0) + 1
+    c.setdefault("_kandidaten", {})[fabrik] = []
     for ziel, _ in sorted(ziele.items(), key=lambda x: -x[1]):
+        c["_kandidaten"][fabrik].append({"adr": ziel, "n": _, "factory": als_adr(_versuch(chain, ziel, SEL["factory"])),
+                                         "weth9": als_adr(_versuch(chain, ziel, SEL["WETH9"])),
+                                         "logs": len(logs)})
         try:
             if als_adr(chain.call(ziel, aufruf(SEL["factory"]))) != fabrik:
                 continue
@@ -235,6 +239,7 @@ def erkunden_robinhood(konfig, daten, cache, bot):
             r.update(b)
             r["npm_passt"] = b["npm_fabrik"] == b["fabrik"]
             r["router"] = router_finden(chain, f["pool"], b["fabrik"], bot, cache, weth=weth)
+            r["router_kandidaten"] = cache.get("router", {}).get("_kandidaten", {}).get(b["fabrik"], [])[:8]
             wp, wts = pool_fuer(chain, b["fabrik"], weth, usdg, cache)
             r["weth_usdg_pool"], r["weth_usdg_ts"] = wp, wts
             if r["router"] and wp:
