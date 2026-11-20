@@ -115,6 +115,8 @@ def router_finden(chain, pool, fabrik, bot, cache, weth=WETH):
         if len(lg.get("topics", [])) > 1:
             s = "0x" + lg["topics"][1][-40:]
             ziele[s] = ziele.get(s, 0) + 1
+    for extra in cache.get("router_vorschlaege", []):  # aus Doku/Repos, wird unten an der Chain geprueft
+        ziele.setdefault(extra.lower(), 0)
     c.setdefault("_kandidaten", {})[fabrik] = []
     for ziel, _ in sorted(ziele.items(), key=lambda x: -x[1]):
         c["_kandidaten"][fabrik].append({"adr": ziel, "n": _, "factory": als_adr(_versuch(chain, ziel, SEL["factory"])),
@@ -225,6 +227,8 @@ def _relay_quote(von, nach, menge, bot):
 def erkunden_robinhood(konfig, daten, cache, bot):
     """Einmalige Erkundung fuer die zweite Chain: Up33-Vertraege, Tausch ETH->USDG, Aktien-Token-Namen, Relay-Brücke."""
     rk = konfig["chains"]["Robinhood"]
+    cache["router_vorschlaege"] = rk.get("router_vorschlaege", [])
+    cache.get("router", {}).pop("0x1ac9db4a2608ba45d6127b1737949b51bb54b7f3", None)
     chain = Chain("Robinhood", rk["rpc"], 4663)
     weth = rk["gas_token"].lower()
     usdg = [a for a, n in rk["dollar"].items() if n == "USDG"][0].lower()

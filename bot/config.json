@@ -124,6 +124,9 @@
           "seed_pool": "0x2f393b60ef0cfaf669af63284e5592dc3a657b73",
           "belohnung": "0x57c0e45cb534413d1c20a4240955d6bb250bb4f1"
         }
+      ],
+      "router_vorschlaege": [
+        "0xC062b870E813fcA720f1e002c234369Ab3aB9415"
       ]
     },
     "Avalanche": {
