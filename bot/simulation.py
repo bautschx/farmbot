@@ -234,6 +234,8 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
                 continue
             if (f.get("apr") or 0) < st["einstieg_apr"]:
                 continue
+            if st.get("auto_bis_apr") and (f.get("apr") or 0) > st["auto_bis_apr"]:
+                continue  # Stefan 20.11.: darueber nur nach Rueckfrage per Telegram
             ok, art = paarfilter.erlaubt(f, dollar.get(f["chain"], set()), top or {}, st["max_kursabweichung_prozent"])
             if ok:
                 f = {**f, "paarart": art}

@@ -3,8 +3,7 @@
 Grundsaetzlich handelt der Bot allein. Nur in zwei Faellen fragt er Stefan mit Ja/Nein-Knoepfen:
   - Puffer: Farm erfuellt alles, liegt aber knapp unter der Einstiegsgrenze (z. B. 938 % statt 1.000 %).
     Gefragt wird nur, wenn die Bot-Wallet gerade in keiner Farm ist.
-  - Ausnahme: Farm ab ausnahme_apr (z. B. 2.000 %), die der Bot nicht von selbst nimmt
-    (Paar ausserhalb von Stablecoin + Aktie/Top-20) oder die einen Wechsel bedeuten wuerde.
+  - Ausnahme: jede Farm ab ausnahme_apr (3.000 %, Stefan 20.11.2026). Darueber steigt der Bot nie von selbst ein.
 Antworten werden bei jedem Lauf (alle 30 min) mit getUpdates abgeholt; nur Knopfdruecke aus Stefans Chat zaehlen.
 Ein "Ja" ist eine Freigabe fuer freigabe_stunden; die Strategie steigt dann im selben Lauf ein bzw. wechselt.
 """
@@ -95,9 +94,9 @@ def fragen(daten, konfig, cache, echt_zustand, top):
             continue
         apr = f.get("apr") or 0
         ok, art = paarfilter.erlaubt(f, dollar.get(f["chain"], set()), top or {}, st["max_kursabweichung_prozent"])
-        if apr >= rk["ausnahme_apr"] and (not ok or position):
-            grund = (f"außergewöhnlich hoch ({art})" if not ok else
-                     f"außergewöhnlich hoch, ich bin gerade in {position['paar']} – wechseln?")
+        if apr >= rk["ausnahme_apr"]:
+            grund = "außergewöhnlich hoch" + ("" if ok else f" (Paar außerhalb deiner Regel: {art})") + \
+                (f", ich bin gerade in {position['paar']} – wechseln?" if position else "")
             fragen_liste.append((f, grund))
         elif ok and not position and rk["puffer_ab_apr"] <= apr < st["einstieg_apr"]:
             fragen_liste.append((f, f"knapp unter {st['einstieg_apr']} %, sonst alles erfüllt"))
