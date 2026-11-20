@@ -720,7 +720,7 @@
     "PancakeSwap": "https://pancakeswap.finance"
   },
   "echt": {
-    "_hinweis": "Stefans Regeln fuer die Bot-Wallet (18.11.2026). live=true: handelt echt, sobald das Geheimnis BOT_KEY gesetzt ist. Erste Runde nur test_einsatz_usd fuer test_dauer_h, dann voller Einsatz. Nur Base/Aero.",
+    "_hinweis": "Stefans Regeln fuer die Bot-Wallet. live=true: handelt echt (BOT_KEY). Chains Base (Aero) und Robinhood (Up33), Wechsel ueber Relay-Bruecke. Raus immer in natives ETH.",
     "live": true,
     "positionen": 1,
     "einsatz_usd": 98,
@@ -732,10 +732,12 @@
     "sperre_stunden": 0,
     "strategie": {
       "chains": [
-        "Base"
+        "Base",
+        "Robinhood"
       ],
       "dexe": [
-        "Aero"
+        "Aero",
+        "Up33"
       ],
       "topf_start_usd": 100,
       "gasreserve_usd": 2,
@@ -763,7 +765,13 @@
       "frage_gueltig_stunden": 6,
       "freigabe_stunden": 2
     },
-    "erkunden_robinhood": true
+    "erkunden_robinhood": false,
+    "sperre_sekunden": 600,
+    "relay_ziele": [
+      "0x4cd00e387622c35bddb9b4c962c136462338bc31"
+    ],
+    "max_bruecke_prozent": 2,
+    "reserve_andere_chain_usd": 1
   },
   "meldungen": {
     "_hinweis": "Stefan 19.11.2026: Telegram nur noch fuer Bot-Wallet (rein/raus/Wechsel mit Grund und APR, Fehler) und aussergewoehnliche Farmen ab ausnahme_apr, die alle Regeln bestehen.",

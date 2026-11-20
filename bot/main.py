@@ -250,7 +250,12 @@ def scan(konfig):
     profil = konfig.get("echt")
     if profil:
         import paarfilter
+        import ausfuehrung
         top = paarfilter.top_liste(cache, profil["strategie"]["top_n"])
+        try:
+            paarfilter.NAMEN = ausfuehrung.token_namen(konfig, daten, cache)
+        except Exception as ex:
+            print("Token-Namen:", ex)
         pfad = os.path.join(DATEN, "echt.json")
         zustand = laden(pfad, {})
         import rueckfrage

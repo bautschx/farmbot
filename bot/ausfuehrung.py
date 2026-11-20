@@ -275,15 +275,29 @@ def erkunden_robinhood(konfig, daten, cache, bot):
     return out
 
 
+def token_namen(konfig, daten, cache):
+    """Namen der Token in Robinhood-Farmen, die alle Regeln bestehen (einmal lesen, dann aus dem Cache)."""
+    namen = cache.setdefault("token_namen", {})
+    neu = [t for f in daten["farmen"] if f["chain"] == "Robinhood" and f.get("alle_regeln_ok")
+           for t in (f["t0"], f["t1"]) if t.lower() not in namen]
+    if neu:
+        chain = Chain("Robinhood", konfig["chains"]["Robinhood"]["rpc"], 4663)
+        for t in set(neu):
+            namen[t.lower()] = _text(_versuch(chain, t, "06fdde03") or "0x") or ""
+    return namen
+
+
 # ---------------------------------------------------------------- Senden
 
 class Wallet:
-    def __init__(self, chain, schluessel, protokoll):
+    def __init__(self, chain, schluessel, protokoll, weth=WETH, usd=USDC):
         from eth_account import Account
         self.konto = Account.from_key(schluessel)
         self.adr = self.konto.address.lower()
         self.chain = chain
         self.log = protokoll
+        self.weth, self.usd = weth.lower(), usd.lower()
+        self.usd_skala = 10 ** (als_int(chain.call(self.usd, aufruf(SEL["decimals"]))) or 6)
 
     def eth(self):
         return int(self.chain.anfrage("eth_getBalance", [self.adr, "latest"]), 16)
@@ -299,7 +313,7 @@ class Wallet:
         prio = 2 * 10 ** 6  # 0,002 gwei
         nonce = int(self.chain.anfrage("eth_getTransactionCount", [self.adr, "pending"]), 16)
         roh = {"to": self.chain_adr(ziel), "data": daten, "value": wert, "gas": gas, "nonce": nonce,
-               "chainId": 8453, "maxFeePerGas": basis * 2 + prio, "maxPriorityFeePerGas": prio, "type": 2}
+               "chainId": self.chain.chain_id, "maxFeePerGas": basis * 2 + prio, "maxPriorityFeePerGas": prio, "type": 2}
         sig = self.konto.sign_transaction(roh)
         raw = getattr(sig, "raw_transaction", None) or getattr(sig, "rawTransaction")
         h = self.chain.anfrage("eth_sendRawTransaction", ["0x" + bytes(raw).hex()])
@@ -309,7 +323,7 @@ class Wallet:
             if beleg:
                 ok = int(beleg["status"], 16) == 1
                 kosten = int(beleg["gasUsed"], 16) * int(beleg.get("effectiveGasPrice", "0x0"), 16)
-                self.log.append({"zeit": int(time.time()), "was": was, "tx": h, "ok": ok,
+                self.log.append({"zeit": int(time.time()), "chain": self.chain.name, "was": was, "tx": h, "ok": ok,
                                  "gas": int(beleg["gasUsed"], 16), "gas_eth": kosten / 1e18})
                 if not ok:
                     raise RuntimeError(f"{was}: Transaktion fehlgeschlagen {h}")
@@ -378,51 +392,51 @@ def raus(w, ist, b, router, e, cache):
 
 def in_eth(w, b, router, e, cache):
     """Stefan 18.11.2026: beim Ausstieg alles in den Gastoken ETH, damit nie das Gas ausgeht.
-    Weg: Paar-Token und Belohnung -> USDC (tiefste Pools), dann USDC -> WETH -> ETH."""
+    Weg: Paar-Token und Belohnung -> w.usd (tiefste Pools), dann w.usd -> w.weth -> ETH."""
     in_usdc(w, b, router, e, cache)
-    m = w.bestand(USDC)
-    if m > 10 ** 5:
-        wp, wts = pool_fuer(w.chain, b["fabrik"], WETH, USDC, cache)
-        tauschen(w, router, USDC, WETH, wts, wp, m, e["toleranz_prozent"])
-    weth = w.bestand(WETH)
+    m = w.bestand(w.usd)
+    if m > w.usd_skala // 10:
+        wp, wts = pool_fuer(w.chain, b["fabrik"], w.weth, w.usd, cache)
+        tauschen(w, router, w.usd, w.weth, wts, wp, m, e["toleranz_prozent"])
+    weth = w.bestand(w.weth)
     if weth:
-        w.senden(WETH, "0x" + SEL["wethWithdraw"] + _w(weth), was="WETH in ETH")
+        w.senden(w.weth, "0x" + SEL["wethWithdraw"] + _w(weth), was="WETH in ETH")
 
 
 def in_usdc(w, b, router, e, cache):
-    """Alles ausser USDC (Paar-Token, Belohnung) in USDC tauschen."""
+    """Alles ausser w.usd (Paar-Token, Belohnung) in w.usd tauschen."""
     tol = e["toleranz_prozent"]
-    for t in {b["t0"], b["t1"], b["belohnung"]} - {USDC, WETH}:
+    for t in {b["t0"], b["t1"], b["belohnung"]} - {w.usd, w.weth}:
         m = w.bestand(t)
         if not m:
             continue
         if t in (b["t0"], b["t1"]):
             pool, ts = b["pool"], b["ts"]
         else:
-            pool, ts = pool_fuer(w.chain, b["fabrik"], t, USDC, cache)
+            pool, ts = pool_fuer(w.chain, b["fabrik"], t, w.usd, cache)
         if not pool:
             print("kein Tauschpool fuer", t)
             continue
         try:
-            tauschen(w, router, t, USDC, ts, pool, m, tol)
+            tauschen(w, router, t, w.usd, ts, pool, m, tol)
         except Exception as ex:
-            print("Tausch in USDC:", ex)
+            print("Tausch in w.usd:", ex)
 
 
 def rein(w, b, router, unten, oben, e, cache, max_usd, preise, merken):
-    """Aus USDC (+ ETH ueber Reserve) die Position im Bereich [unten, oben) aufbauen und im Gauge anlegen."""
+    """Aus w.usd (+ ETH ueber Reserve) die Position im Bereich [unten, oben) aufbauen und im Gauge anlegen."""
     tol = e["toleranz_prozent"]
-    eth_preis = preise.get(WETH)
+    eth_preis = preise.get(w.weth)
     reserve = int(e["strategie"]["gasreserve_usd"] / eth_preis * 1e18) if eth_preis else 0
-    # nur so viel ETH in USDC, wie gebraucht wird (Rest bleibt ETH)
-    bedarf = int(max_usd / eth_preis * 1e18) - int(w.bestand(USDC) / 1e6 / eth_preis * 1e18)
+    # nur so viel ETH in w.usd, wie gebraucht wird (Rest bleibt ETH)
+    bedarf = int(max_usd / eth_preis * 1e18) - int(w.bestand(w.usd) / w.usd_skala / eth_preis * 1e18)
     ueber = min(w.eth() - reserve, bedarf)
     if ueber > 10 ** 14:
-        wp, wts = pool_fuer(w.chain, b["fabrik"], WETH, USDC, cache)
-        tauschen(w, router, WETH, USDC, wts, wp, ueber, tol, mit_eth=True)
-    usdc = min(w.bestand(USDC), int(max_usd * 1e6))
-    if usdc < 2 * 10 ** 6:
-        raise RuntimeError("zu wenig USDC für eine Position")
+        wp, wts = pool_fuer(w.chain, b["fabrik"], w.weth, w.usd, cache)
+        tauschen(w, router, w.weth, w.usd, wts, wp, ueber, tol, mit_eth=True)
+    usdc = min(w.bestand(w.usd), int(max_usd * w.usd_skala))
+    if usdc < 2 * w.usd_skala:
+        raise RuntimeError("zu wenig Dollar-Token für eine Position")
     # Anteil token0/token1 nach Wert fuer den Bereich
     sq, tick = _kurs(w.chain, b["pool"])
     s, sa, sb = sq / Q96, _sqrt_tick(unten), _sqrt_tick(oben)
@@ -430,14 +444,14 @@ def rein(w, b, router, unten, oben, e, cache, max_usd, preise, merken):
     p = s * s  # roh token1 je roh token0
     wert1 = x1 + x0 * p  # in Roh-token1
     anteil0 = x0 * p / wert1 if wert1 else 0.5
-    andere = b["t1"] if b["t0"] == USDC else b["t0"]
-    usdc_ist_0 = b["t0"] == USDC
+    andere = b["t1"] if b["t0"] == w.usd else b["t0"]
+    usdc_ist_0 = b["t0"] == w.usd
     tausch_anteil = (1 - anteil0) if usdc_ist_0 else anteil0  # Wertanteil, der in den anderen Token muss
-    tauschen(w, router, USDC, andere, b["ts"], b["pool"], int(usdc * tausch_anteil), tol)
+    tauschen(w, router, w.usd, andere, b["ts"], b["pool"], int(usdc * tausch_anteil), tol)
     a0, a1 = w.bestand(b["t0"]), w.bestand(b["t1"])
-    if b["t0"] == USDC:
+    if b["t0"] == w.usd:
         a0 = min(a0, usdc)
-    if b["t1"] == USDC:
+    if b["t1"] == w.usd:
         a1 = min(a1, usdc)
     w.freigeben(b["t0"], b["npm"], a0)
     w.freigeben(b["t1"], b["npm"], a1)
@@ -463,49 +477,106 @@ def _apr_txt(x):
     return f"{round(x):,}".replace(",", ".") + " %" if x is not None else "?"
 
 
+KETTEN = {  # Chain -> (Chain-ID, WETH, Dollar-Token fuer den Weg Ausstieg -> ETH)
+    "Base": (8453, WETH, USDC),
+    "Robinhood": (4663, "0x0bd7d308f8e1639fab988df18a8011f41eacad73", "0x5fc5360d0400a0fd4f2af552add042d716f1d168"),
+}
+
+
+def _kette(konfig, name):
+    cid, weth, usd = KETTEN[name]
+    return Chain(name, konfig["chains"][name]["rpc"], cid), weth, usd
+
+
+def bruecke(w_von, ziel_name, ziel_id, menge, e, w_nach):
+    """ETH ueber Relay von w_von.chain nach ziel_name schicken; wartet, bis es angekommen ist.
+    Geprueft: Empfaenger ist die Bot-Wallet, Ziel der Einzahlung ist ein bekannter Relay-Vertrag,
+    und es kommen mindestens (100 - max_bruecke_prozent) % an."""
+    import urllib.request
+    body = {"user": w_von.adr, "recipient": w_von.adr, "originChainId": w_von.chain.chain_id,
+            "destinationChainId": ziel_id, "originCurrency": NULL, "destinationCurrency": NULL,
+            "amount": str(menge), "tradeType": "EXACT_INPUT"}
+    req = urllib.request.Request("https://api.relay.link/quote", data=json.dumps(body).encode(),
+                                 headers={"content-type": "application/json", "user-agent": "farmbot"})
+    with urllib.request.urlopen(req, timeout=25) as r:
+        q = json.loads(r.read())
+    raus = int(((q.get("details") or {}).get("currencyOut") or {}).get("amount") or 0)
+    if raus < menge * (1 - e["max_bruecke_prozent"] / 100):
+        raise RuntimeError(f"Brücke zu teuer: {menge} rein, {raus} raus")
+    erlaubt = {a.lower() for a in e["relay_ziele"]}
+    vorher = w_nach.eth()
+    for st in q.get("steps", []):
+        for it in st.get("items", []):
+            d = it.get("data") or {}
+            if int(d.get("chainId", w_von.chain.chain_id)) != w_von.chain.chain_id or d.get("to", "").lower() not in erlaubt:
+                raise RuntimeError(f"Brücke: unerwartetes Ziel {d.get('to')}")
+            w_von.senden(d["to"], d.get("data", "0x"), wert=int(d.get("value") or 0), was=f"Brücke nach {ziel_name}")
+    for _ in range(40):
+        time.sleep(3)
+        if w_nach.eth() - vorher >= raus * 0.99:
+            return raus
+    raise RuntimeError("Brücke: ETH noch nicht angekommen (wird beim nächsten Lauf weiter verwendet)")
+
+
 def schritt(konfig, daten, soll, cache, zustand, schluessel):
-    """Gleicht die Wallet an den Soll-Zustand (Profil echt) an. Gibt Meldungen zurueck."""
+    """Gleicht die Wallet an den Soll-Zustand (Profil echt) an. Gibt Meldungen zurueck.
+    Mehrere Chains (Base/Aero, Robinhood/Up33): der Topf liegt immer auf einer Chain; bei Bedarf Relay-Brücke."""
     e = konfig["echt"]
-    chain = Chain("Base", konfig["chains"]["Base"]["rpc"], 8453)
     log = zustand.setdefault("protokoll", [])
-    w = Wallet(chain, schluessel, log)
+    wallets = {}
+
+    def wallet(name):
+        if name not in wallets:
+            ch, weth, usd = _kette(konfig, name)
+            wallets[name] = Wallet(ch, schluessel, log, weth, usd)
+            for v in konfig["chains"][name].get("router_vorschlaege", []):
+                cache.setdefault("router_vorschlaege", [])
+                if v.lower() not in cache["router_vorschlaege"]:
+                    cache["router_vorschlaege"].append(v.lower())
+        return wallets[name]
+
     meldungen = []
-    ist = zustand.get("position")  # {"pool","token_id","unten","oben","block_einzahlung","compounds","paar"}
+    ist = zustand.get("position")  # {"chain","pool","token_id","unten","oben","start","compounds","paar",...}
+    if ist and not ist.get("chain"):
+        ist["chain"] = "Base"
     sp = (soll.get("offen") or [None])[0]
-    farmen = {f["pool"]: f for f in daten["farmen"]}
+    farmen = {(f["chain"], f["pool"]): f for f in daten["farmen"]}
     preise = {}
     for f in daten["farmen"]:
         s = f.get("sim") or {}
-        if s.get("p0"):
-            preise[f["t0"]] = s["p0"]
-        if s.get("p1"):
-            preise[f["t1"]] = s["p1"]
-    if WETH not in preise:
+        for t, k in ((f["t0"], "p0"), (f["t1"], "p1")):
+            if s.get(k):
+                preise[(f["chain"], t)] = s[k]
+    eth_preis = preise.get(("Base", WETH)) or preise.get(("Robinhood", KETTEN["Robinhood"][1]))
+    if not eth_preis:
         meldungen.append("⚠️ Bot-Wallet: kein ETH-Kurs, nichts getan")
         return meldungen
+    preise_eth = {"_eth": eth_preis}
 
-    # Testphase: erster Zyklus nur mit kleinem Betrag
-    test = zustand.get("test_abgeschlossen") is not True
+    if sp and sp["chain"] not in e["strategie"]["chains"]:
+        sp = None
+    # Testrunde je Chain: erste Position auf einer neuen Chain nur mit kleinem Betrag
+    getestet = set(zustand.setdefault("getestet", ["Base"] if zustand.get("test_abgeschlossen") else []))
+    test_chain = (ist or sp or {}).get("chain")
+    test = bool(test_chain) and test_chain not in getestet
     max_usd = e["test_einsatz_usd"] if test else e["max_einsatz_usd"]
 
-    block = chain.block()
-    sperre_ok = not ist or block - ist.get("block_einzahlung", 0) >= e["sperre_bloecke"]
-
-    def info(pool):
-        f = farmen.get(pool) or {"pool": pool, "gauge": ist.get("gauge"), "t0": ist.get("t0"), "t1": ist.get("t1")}
-        b = basis_lesen(chain, f, w.adr)
-        r = router_finden(chain, pool, b["fabrik"], w.adr, cache)
+    def info(chain_name, pool, ersatz=None):
+        w = wallet(chain_name)
+        f = farmen.get((chain_name, pool)) or ersatz
+        b = basis_lesen(w.chain, f, w.adr)
+        r = router_finden(w.chain, pool, b["fabrik"], w.adr, cache, weth=w.weth)
         if not r:
-            raise RuntimeError("kein passender Router gefunden")
-        return b, r
+            raise RuntimeError(f"kein passender Router auf {chain_name}")
+        return w, b, r
 
-    # Gehoert die Position noch dem Bot? (Stefan hat sie am 18.11. in vfat uebernommen und dort beendet;
-    # danach lief jeder Ausstieg in "NA"-Fehler.) Wenn nicht: Position vergessen statt endlos Fehler melden.
+    # Gehoert die Position noch dem Bot?
     if ist:
-        npm = als_adr(_versuch(chain, ist["gauge"], SEL["nft"]))
-        eigner = als_adr(_versuch(chain, npm, SEL["ownerOf"], ist["token_id"])) if npm else None
+        w = wallet(ist["chain"])
+        npm = als_adr(_versuch(w.chain, ist["gauge"], SEL["nft"]))
+        eigner = als_adr(_versuch(w.chain, npm, SEL["ownerOf"], ist["token_id"])) if npm else None
         meins = eigner == w.adr or (eigner == ist["gauge"].lower() and
-                                    als_int(_versuch(chain, ist["gauge"], "c69deec5", w.adr, ist["token_id"])) == 1)
+                                    als_int(_versuch(w.chain, ist["gauge"], "c69deec5", w.adr, ist["token_id"])) == 1)
         if not meins:
             zustand.setdefault("geschlossen", []).append({**ist, "ende": int(time.time()), "grund": "nicht mehr in Bot-Hand"})
             zustand["position"] = None
@@ -514,58 +585,77 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
 
     aendern = False
     if ist:
-        if not sp or sp["pool"] != ist["pool"] or sp["unten"] != ist["unten"] or sp["oben"] != ist["oben"]:
+        if not sp or (sp["chain"], sp["pool"]) != (ist["chain"], ist["pool"]) or sp["unten"] != ist["unten"] \
+                or sp["oben"] != ist["oben"]:
             aendern = True
         elif sp.get("compounds", 0) > ist.get("compounds", 0):
             aendern = True
         elif test and time.time() - ist.get("start", 0) > e["test_dauer_h"] * 3600:
-            aendern = True  # Testposition nach der Testdauer wieder aufloesen
+            aendern = True
     if ist and aendern:
-        if not sperre_ok:
-            meldungen.append(f"⏳ Bot-Wallet: Wechsel wartet auf Sperrfrist ({e['sperre_bloecke']} Blöcke)")
+        if time.time() - ist.get("start", 0) < e["sperre_sekunden"]:
+            meldungen.append("⏳ Bot-Wallet: Wechsel wartet auf die Sperrfrist nach dem Einzahlen")
             return meldungen
-        b, r = info(ist["pool"])
-        wert_vorher = zustand.get("wert_usd")
+        w, b, r = info(ist["chain"], ist["pool"], {"pool": ist["pool"], "gauge": ist["gauge"], "t0": ist["t0"], "t1": ist["t1"]})
         raus(w, ist, b, r, e, cache)
-        usdc = w.eth() / 1e18 * preise[WETH]
-        zustand["eth_nach"] = w.eth() / 1e18
-        zustand.setdefault("geschlossen", []).append({**ist, "ende": int(time.time()), "eth_danach": zustand["eth_nach"],
-                                                       "usd_danach": round(usdc, 2)})
+        eth_nach = w.eth() / 1e18
+        usd = eth_nach * eth_preis
+        zustand.setdefault("geschlossen", []).append({**ist, "ende": int(time.time()), "eth_danach": eth_nach,
+                                                       "usd_danach": round(usd, 2)})
         zustand["position"] = None
         ist = None
         if test:
-            zustand["test_abgeschlossen"] = True
-            meldungen.append(f"✅ Bot-Wallet: Testrunde abgeschlossen, Wallet jetzt {zustand['eth_nach']:.5f} ETH (~{usdc:.2f} $). Ab jetzt voller Einsatz.")
+            zustand["getestet"] = sorted(getestet | {zustand["geschlossen"][-1]["chain"]})
+            test = False
+            meldungen.append(f"✅ Bot-Wallet: Testrunde auf {zustand['geschlossen'][-1]['chain']} abgeschlossen, {eth_nach:.5f} ETH (~{usd:.2f} $). Ab jetzt voller Einsatz.")
             max_usd = e["max_einsatz_usd"]
         else:
             letzte = (soll.get("geschlossen") or [{}])[-1]
             zustand["raus_info"] = {"paar": zustand["geschlossen"][-1].get("paar"), "grund": letzte.get("grund"),
-                                    "eth": zustand["eth_nach"], "usd": round(usdc, 2)}
+                                    "eth": eth_nach, "usd": round(usd, 2), "chain": zustand["geschlossen"][-1]["chain"]}
     if not ist and sp:
-        b, r = info(sp["pool"])
-        basis = {"pool": sp["pool"], "gauge": b["gauge"], "t0": b["t0"], "t1": b["t1"], "unten": sp["unten"],
-                 "oben": sp["oben"], "paar": sp["paar"], "compounds": sp.get("compounds", 0), "start": int(time.time())}
-        neu = rein(w, b, r, sp["unten"], sp["oben"], e, cache, max_usd, preise,
+        test = sp["chain"] not in set(zustand.get("getestet", []))
+        max_usd = e["test_einsatz_usd"] if test else e["max_einsatz_usd"]
+        ziel = sp["chain"]
+        w = wallet(ziel)
+        reserve = int(e["strategie"]["gasreserve_usd"] / eth_preis * 1e18)
+        bedarf = int(max_usd / eth_preis * 1e18) + reserve
+        # liegt das Geld auf einer anderen Chain? dann hinüber (Rest dort: kleine Gasreserve)
+        if w.eth() < bedarf * 0.9:
+            for andere in e["strategie"]["chains"]:
+                if andere == ziel:
+                    continue
+                wa = wallet(andere)
+                rest = int(e["reserve_andere_chain_usd"] / eth_preis * 1e18)
+                menge = min(wa.eth() - rest, bedarf - w.eth())
+                if menge > int(5 / eth_preis * 1e18):
+                    angekommen = bruecke(wa, ziel, w.chain.chain_id, menge, e, w)
+                    meldungen.append(f"🌉 Bot-Wallet: {menge / 1e18:.5f} ETH von {andere} nach {ziel} "
+                                     f"({angekommen / 1e18:.5f} angekommen)")
+        w, b, r = info(ziel, sp["pool"])
+        basis = {"chain": ziel, "pool": sp["pool"], "gauge": b["gauge"], "t0": b["t0"], "t1": b["t1"],
+                 "unten": sp["unten"], "oben": sp["oben"], "paar": sp["paar"], "compounds": sp.get("compounds", 0),
+                 "start": int(time.time())}
+        neu = rein(w, b, r, sp["unten"], sp["oben"], e, cache, max_usd, {w.weth: eth_preis},
                    lambda x: zustand.__setitem__("position", {**basis, **x}))
-        zustand["position"] = {**neu, "pool": sp["pool"], "gauge": b["gauge"], "t0": b["t0"], "t1": b["t1"],
-                               "unten": sp["unten"], "oben": sp["oben"], "paar": sp["paar"],
-                               "compounds": sp.get("compounds", 0), "start": int(time.time())}
+        zustand["position"] = {**basis, **neu, "start": int(time.time())}
         ri = zustand.pop("raus_info", None)
-        rein_txt = f"<b>{sp['paar']}</b> (Base · Aero) mit {_apr_txt(sp.get('apr_start'))} APR bei ±{sp.get('bereich_prozent')} %"
+        dex = (farmen.get((ziel, sp["pool"])) or {}).get("dex", "")
+        rein_txt = f"<b>{sp['paar']}</b> ({ziel} · {dex}) mit {_apr_txt(sp.get('apr_start'))} APR bei ±{sp.get('bereich_prozent')} %"
         if ri:
-            meldungen.append(f"🔄 Bot-Wallet gewechselt: {ri['paar']} → {rein_txt}\nGrund: {ri.get('grund')}")
+            meldungen.append(f"🔄 Bot-Wallet gewechselt: {ri['paar']} ({ri.get('chain')}) → {rein_txt}\nGrund: {ri.get('grund')}")
         else:
             meldungen.append("💰 Bot-Wallet rein: " + rein_txt + (" – Testrunde mit kleinem Betrag" if test else ""))
     elif zustand.get("raus_info"):
         ri = zustand.pop("raus_info")
         meldungen.append(f"💰 Bot-Wallet raus: {ri['paar']} ({ri.get('grund')}). Keine Farm über "
                          f"{e['strategie']['einstieg_apr']} %, wartet in ETH: {ri['eth']:.5f} ETH (~{ri['usd']} $)")
-    # Kennzahlen
+    # Kennzahlen je Chain
     try:
-        zustand["eth"] = w.eth() / 1e18
-        zustand["usdc"] = w.bestand(USDC) / 1e6
+        zustand["eth_je_chain"] = {n: round(wallet(n).eth() / 1e18, 6) for n in e["strategie"]["chains"]}
+        zustand["eth"] = round(sum(zustand["eth_je_chain"].values()), 6)
         zustand["gas_gesamt_eth"] = round(sum(x.get("gas_eth", 0) for x in log), 6)
-    except Exception:
-        pass
+    except Exception as ex:
+        print("Kennzahlen:", ex)
     zustand["zeit"] = int(time.time())
     return meldungen

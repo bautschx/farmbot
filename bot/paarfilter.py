@@ -23,7 +23,14 @@ ALIAS = {"weth": "eth", "cbbtc": "btc", "wbtc": "btc", "cbeth": "eth", "wsteth":
 STABLE_CG = {"usdt", "usdc", "usde", "dai", "usds", "fdusd", "pyusd", "usd1", "tusd", "rlusd", "usdtb", "bsc-usd"}
 
 
+NAMEN = {}  # Adresse -> Token-Name (von der Chain gelesen, siehe ausfuehrung.token_namen)
+
+
 def ist_aktie(sym, adr):
+    """Coinbase-Aktien-Token auf Base (B20, Kuerzel ...c) oder Robinhood-Aktien-Token
+    (Name endet auf "Robinhood Token", z. B. "NVIDIA • Robinhood Token"; geprueft 20.11.2026)."""
+    if (NAMEN.get(adr.lower()) or "").strip().endswith("Robinhood Token"):
+        return True
     return bool(AKTIE_ADR.match(adr.lower()) and AKTIE_SYM.match(sym or ""))
 
 
