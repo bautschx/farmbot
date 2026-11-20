@@ -759,7 +759,8 @@
       "frage_pause_stunden": 12,
       "frage_gueltig_stunden": 6,
       "freigabe_stunden": 2
-    }
+    },
+    "erkunden_robinhood": true
   },
   "meldungen": {
     "_hinweis": "Stefan 19.11.2026: Telegram nur noch fuer Bot-Wallet (rein/raus/Wechsel mit Grund und APR, Fehler) und aussergewoehnliche Farmen ab ausnahme_apr, die alle Regeln bestehen.",

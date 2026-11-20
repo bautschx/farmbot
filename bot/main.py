@@ -292,6 +292,11 @@ def scan(konfig):
                 print("Bot-Wallet Prüfung:", json.dumps(wzustand["pruefung"])[:1500])
             except Exception as ex:
                 print("Bot-Wallet Prüfung fehlgeschlagen:", ex)
+        if profil.get("erkunden_robinhood"):
+            try:
+                wzustand["erkundung_robinhood"] = ausfuehrung.erkunden_robinhood(konfig, daten, cache, profil["bot_adresse"])
+            except Exception as ex:
+                wzustand["erkundung_robinhood"] = {"fehler": str(ex)[:300]}
         speichern(wpfad, wzustand)
         speichern(os.path.join(HIER, "cache.json"), cache)
 

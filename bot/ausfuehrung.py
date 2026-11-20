@@ -87,7 +87,7 @@ def basis_lesen(chain, f, bot):
             "ts": ts, "belohnung": belohnung, "t0": f["t0"], "t1": f["t1"]}
 
 
-def router_finden(chain, pool, fabrik, bot, cache):
+def router_finden(chain, pool, fabrik, bot, cache, weth=WETH):
     """Router aus den letzten Swaps des Pools: haeufigstes Ziel, dessen factory() und WETH9() passen
     und dessen exactInputSingle mit ETH als Bezahlung in der Simulation funktioniert."""
     c = cache.setdefault("router", {})
@@ -119,7 +119,7 @@ def router_finden(chain, pool, fabrik, bot, cache):
         try:
             if als_adr(chain.call(ziel, aufruf(SEL["factory"]))) != fabrik:
                 continue
-            if als_adr(chain.call(ziel, aufruf(SEL["WETH9"]))) != WETH:
+            if als_adr(chain.call(ziel, aufruf(SEL["WETH9"]))) != weth:
                 continue
         except Exception:
             continue
@@ -186,6 +186,82 @@ def pruefen(konfig, daten, cache, bot):
         except Exception as ex:
             r["fehler"] = str(ex)[:200]
         out["farmen"].append(r)
+    return out
+
+
+def _text(roh):
+    try:
+        b = bytes.fromhex(roh[2:])
+        n = int.from_bytes(b[32:64], "big")
+        return b[64:64 + n].decode("utf-8", "replace")
+    except Exception:
+        return None
+
+
+def _relay_quote(von, nach, menge, bot):
+    import urllib.request
+    body = {"user": bot, "recipient": bot, "originChainId": von, "destinationChainId": nach,
+            "originCurrency": NULL, "destinationCurrency": NULL, "amount": str(menge), "tradeType": "EXACT_INPUT"}
+    req = urllib.request.Request("https://api.relay.link/quote", data=json.dumps(body).encode(),
+                                 headers={"content-type": "application/json", "user-agent": "farmbot"})
+    with urllib.request.urlopen(req, timeout=25) as r:
+        q = json.loads(r.read())
+    det = q.get("details") or {}
+    schritte = [{"id": st.get("id"), "art": st.get("kind"),
+                 "ziele": [(it.get("data") or {}).get("to") for it in st.get("items", [])],
+                 "werte": [(it.get("data") or {}).get("value") for it in st.get("items", [])]}
+                for st in q.get("steps", [])]
+    return {"rein": (det.get("currencyIn") or {}).get("amountFormatted"),
+            "raus": (det.get("currencyOut") or {}).get("amountFormatted"),
+            "zeit_s": det.get("timeEstimate"), "gebuehren": {k: (v or {}).get("amountUsd")
+                                                             for k, v in (q.get("fees") or {}).items()},
+            "schritte": schritte}
+
+
+def erkunden_robinhood(konfig, daten, cache, bot):
+    """Einmalige Erkundung fuer die zweite Chain: Up33-Vertraege, Tausch ETH->USDG, Aktien-Token-Namen, Relay-Brücke."""
+    rk = konfig["chains"]["Robinhood"]
+    chain = Chain("Robinhood", rk["rpc"], 4663)
+    weth = rk["gas_token"].lower()
+    usdg = [a for a, n in rk["dollar"].items() if n == "USDG"][0].lower()
+    out = {"zeit": time.strftime("%d.%m.%Y %H:%M UTC", time.gmtime()), "farmen": [], "token": {}}
+    kand = [f for f in daten["farmen"] if f["chain"] == "Robinhood" and f["dex"] == "Up33"]
+    kand.sort(key=lambda f: -(f.get("apr") or 0))
+    for f in kand[:3]:
+        r = {"paar": f["paar"], "pool": f["pool"], "gauge": f["gauge"]}
+        try:
+            r["sonde"] = sonde(chain, f)
+            b = basis_lesen(chain, f, bot)
+            r.update(b)
+            r["npm_passt"] = b["npm_fabrik"] == b["fabrik"]
+            r["router"] = router_finden(chain, f["pool"], b["fabrik"], bot, cache, weth=weth)
+            wp, wts = pool_fuer(chain, b["fabrik"], weth, usdg, cache)
+            r["weth_usdg_pool"], r["weth_usdg_ts"] = wp, wts
+            if r["router"] and wp:
+                menge = 10 ** 14
+                hexd = "0x" + SEL["exactInputSingle"] + _w(weth, usdg, wts, bot, int(time.time()) + 600, menge, 0, 0)
+                try:
+                    roh = chain.anfrage("eth_call", [{"from": bot, "to": r["router"], "data": hexd, "value": hex(menge)}, "latest"])
+                    dez = als_int(chain.call(usdg, aufruf(SEL["decimals"])))
+                    r["sim_tausch_usdg"] = als_int(roh) / 10 ** dez
+                except Exception as ex:
+                    r["sim_tausch_fehler"] = str(ex)[:200]
+        except Exception as ex:
+            r["fehler"] = str(ex)[:200]
+        out["farmen"].append(r)
+    # Namen der Token in USDG-Paaren (Aktien-Token erkennen)
+    gesehen = set()
+    for f in kand:
+        for t, sym in zip((f["t0"], f["t1"]), f["paar"].split("/")):
+            if t in gesehen or t == usdg or len(gesehen) > 40:
+                continue
+            gesehen.add(t)
+            out["token"][sym] = {"adr": t, "name": _text(_versuch(chain, t, "06fdde03") or "0x")}
+    for von, nach, name in ((8453, 4663, "base_nach_robinhood"), (4663, 8453, "robinhood_nach_base")):
+        try:
+            out[name] = _relay_quote(von, nach, 10 ** 15, bot)
+        except Exception as ex:
+            out[name] = {"fehler": str(ex)[:300]}
     return out
 
 
