@@ -250,7 +250,8 @@ def erkunden_robinhood(konfig, daten, cache, bot):
                 menge = 10 ** 14
                 hexd = "0x" + SEL["exactInputSingle"] + _w(weth, usdg, wts, bot, int(time.time()) + 600, menge, 0, 0)
                 try:
-                    roh = chain.anfrage("eth_call", [{"from": bot, "to": r["router"], "data": hexd, "value": hex(menge)}, "latest"])
+                    roh = chain.anfrage("eth_call", [{"from": bot, "to": r["router"], "data": hexd, "value": hex(menge)}, "latest",
+                                                     {bot: {"balance": hex(10 ** 18)}}])  # angenommenes Guthaben
                     dez = als_int(chain.call(usdg, aufruf(SEL["decimals"])))
                     r["sim_tausch_usdg"] = als_int(roh) / 10 ** dez
                 except Exception as ex:
