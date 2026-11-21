@@ -297,6 +297,13 @@ def scan(konfig):
                 print("Bot-Wallet Prüfung:", json.dumps(wzustand["pruefung"])[:1500])
             except Exception as ex:
                 print("Bot-Wallet Prüfung fehlgeschlagen:", ex)
+        if profil.get("merkl_erkunden"):
+            try:
+                import merkl_erkunden
+                speichern(os.path.join(DATEN, "merkl_erkundung.json"),
+                          merkl_erkunden.laufen(konfig, profil["merkl_erkunden"]))
+            except Exception as ex:
+                print("Merkl-Erkundung:", ex)
         if profil.get("dexumschau"):
             try:
                 import dexumschau
