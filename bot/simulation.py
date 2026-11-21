@@ -123,7 +123,8 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
             continue
         pos["fehlt"] = 0
         sim = f["sim"]
-        im_bereich = pos["unten"] <= sim["tick"] < pos["oben"]
+        # Beefy-Tresor: Beefy zieht den Bereich selbst nach, die Position ist immer im Bereich
+        im_bereich = pos.get("art") == "tresor" or pos["unten"] <= sim["tick"] < pos["oben"]
         anteil = (int(pos["im_bereich"]) + int(im_bereich)) / 2  # Mittel aus Anfang und Ende
         verd = sim["L"] / (sim["L"] + pos["L"]) if sim["L"] else 1.0
         menge = sim["rate"] * pos["L"] * dt * anteil * verd / 10 ** sim["rd"]
@@ -261,7 +262,7 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
             "start_x0": neu["x0"], "start_x1": neu["x1"], "im_bereich": True,
             "wert_usd": e["einsatz_usd"] - kosten, "gehalten_usd": e["einsatz_usd"] - kosten,
             "belohnung_menge": 0.0, "belohnung_usd": 0.0, "kosten_usd": kosten, "nachgezogen": 0,
-            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "paarart": f.get("paarart"),
+            "zeit_im_bereich_s": 0, "laufzeit_s": 0, "paarart": f.get("paarart"), "art": f.get("art"),
             "einstieg_ref": min(st["einstieg_apr"], f.get("apr") or 0) if (st and f.get("freigabe")) else None, "fehlt": 0, "apr_schwach": 0, "trend_schwach": 0, "liq_schwach": 0,
             "apr_start": f.get("apr"), "apr_jetzt": f.get("apr"),
             "merkmale": {"bereich_prozent": breite, "bereich_mindest_prozent": f.get("bereich_mindest_prozent"),

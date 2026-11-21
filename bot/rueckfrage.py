@@ -103,8 +103,12 @@ def fragen(daten, konfig, cache, echt_zustand, top):
     fragen_liste.sort(key=lambda x: -(x[0].get("apr") or 0))
     for f, grund in fragen_liste[:2]:
         apr = round(f.get("apr") or 0)
-        text = (f"❓ <b>Soll ich einsteigen?</b>\n<b>{f['paar']}</b> (Base · Aero): {apr:,} % APR bei ±{f['bereich_prozent']} %"
-                .replace(",", ".") + f"\n{grund}\n" + (links.fuer_farm(f) or "") +
+        apr_txt = f"{apr:,}".replace(",", ".")
+        bereich = "" if f.get("art") == "tresor" else f" bei ±{f['bereich_prozent']} %"
+        tresor = (f"\nBeefy-Tresor, Belohnung {f.get('belohnung')}, Kampagne bis {f['merkl']['ende']}"
+                  if f.get("art") == "tresor" else "")
+        text = (f"❓ <b>Soll ich einsteigen?</b>\n<b>{f['paar']}</b> ({f['chain']} · {f['dex']}): {apr_txt} % APR{bereich}"
+                f"\n{grund}\n" + (links.fuer_farm(f) or "") + tresor +
                 "\n\nAntwort wird beim nächsten Lauf (spätestens 30 min) umgesetzt.")
         r = _api("sendMessage", {"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True,
                                  "reply_markup": {"inline_keyboard": [[

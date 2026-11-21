@@ -264,10 +264,21 @@ def scan(konfig):
                 print("Rückfrage-Antworten:", rueckfrage.antworten_holen(cache, zustand))
             except Exception as ex:
                 print("Rückfrage-Antworten fehlgeschlagen:", ex)
-        ereignisse = simulation.laufen(daten, konfig, zustand, profil=profil, top=top)
+        # Merkl-Kampagnen auf Beefy-Tresoren als zusaetzliche Farmen (nur fuer die Bot-Wallet)
+        daten_echt = daten
+        try:
+            import merkl_farmen
+            tresore = merkl_farmen.erzeugen(daten, konfig, cache, top)
+            daten_echt = {**daten, "farmen": daten["farmen"] + tresore}
+            zustand["tresore"] = [{k: t.get(k) for k in ("chain", "paar", "pool", "apr", "tvl_usd", "alle_regeln_ok",
+                                                          "pruefung", "merkl")} for t in tresore]
+            print("Merkl-Tresore:", [(t["paar"], t["apr"], t["alle_regeln_ok"]) for t in tresore])
+        except Exception as ex:
+            print("Merkl-Tresore fehlgeschlagen:", ex)
+        ereignisse = simulation.laufen(daten_echt, konfig, zustand, profil=profil, top=top)
         if profil.get("live"):
             try:
-                rueckfrage.fragen(daten, konfig, cache, zustand, top)
+                rueckfrage.fragen(daten_echt, konfig, cache, zustand, top)
             except Exception as ex:
                 print("Rückfrage fehlgeschlagen:", ex)
         zustand["modus"] = "trocken" if not profil.get("live") else "live"
@@ -284,7 +295,7 @@ def scan(konfig):
         wzustand = laden(wpfad, {})
         if profil.get("live") and schluessel:
             try:
-                for m in ausfuehrung.schritt(konfig, daten, zustand, cache, wzustand, schluessel):
+                for m in ausfuehrung.schritt(konfig, daten_echt, zustand, cache, wzustand, schluessel):
                     telegram(m, wichtig=True)
             except Exception as ex:
                 wzustand.setdefault("fehler", []).append({"zeit": int(time.time()), "text": str(ex)[:300]})

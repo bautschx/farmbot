@@ -737,7 +737,8 @@
       ],
       "dexe": [
         "Aero",
-        "Up33"
+        "Up33",
+        "Beefy·Merkl"
       ],
       "topf_start_usd": 100,
       "gasreserve_usd": 2,
@@ -774,13 +775,13 @@
     "max_bruecke_prozent": 2,
     "reserve_andere_chain_usd": 1,
     "dexumschau": false,
-    "merkl_erkunden": [
-      [
-        "Base",
-        8453,
-        "0x76352b140C114FE69E004cf1a2fD07f9fbf094E7"
-      ]
-    ]
+    "merkl_erkunden": [],
+    "merkl_tresore": {
+      "_hinweis": "Merkl-Kampagnen auf Beefy-Tresoren (21.11.2026). Belohnung muss Dollar-Token sein, Kampagne noch >= 24 h.",
+      "aktiv": true,
+      "min_usd_tag": 20,
+      "min_tvl_usd": 1000
+    }
   },
   "meldungen": {
     "_hinweis": "Stefan 19.11.2026: Telegram nur noch fuer Bot-Wallet (rein/raus/Wechsel mit Grund und APR, Fehler) und aussergewoehnliche Farmen ab ausnahme_apr, die alle Regeln bestehen.",

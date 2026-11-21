@@ -477,6 +477,108 @@ def _apr_txt(x):
     return f"{round(x):,}".replace(",", ".") + " %" if x is not None else "?"
 
 
+# ---------------------------------------------------------------- Beefy-Tresor + Merkl
+
+MERKL_VERTEILER = "0x3ef3d8ba38ebe18db133cec108f4d14ce00dd9ae"  # am 21.11.2026 auf Base geprueft (Code vorhanden)
+
+
+def tresor_lesen(w, f, cache):
+    """Tresor, seine zwei Token (Reihenfolge wie im Tresor), Aero-Pool der Strategie, Router."""
+    vault = f["pool"]
+    pool = f["strategie_pool"]
+    fabrik = als_adr(w.chain.call(pool, aufruf(SEL["factory"])))
+    ts = als_int(w.chain.call(pool, aufruf(SEL["tickSpacing"])), signed=True)
+    r = router_finden(w.chain, pool, fabrik, w.adr, cache, weth=w.weth)
+    if not r:
+        raise RuntimeError("kein passender Router für den Tresor-Pool")
+    b = {"pool": pool, "ts": ts, "fabrik": fabrik, "t0": f["want0"], "t1": f["want1"], "belohnung": w.usd,
+         "vault": vault}
+    return b, r
+
+
+def merkl_abholen(w, was="Merkl-Belohnung abholen"):
+    """Alle abholbaren Merkl-Belohnungen dieser Chain an die Bot-Wallet. Gibt {Token: Menge} zurueck."""
+    import urllib.request
+    from eth_abi import encode
+    url = f"https://api.merkl.xyz/v4/users/{w.adr}/rewards?chainId={w.chain.chain_id}"
+    req = urllib.request.Request(url, headers={"user-agent": "farmbot/1.0", "accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        daten = json.loads(r.read())
+    tokens, mengen, beweise, neu = [], [], [], {}
+    for kette in daten if isinstance(daten, list) else [daten]:
+        for rw in kette.get("rewards", []):
+            menge, geholt = int(rw.get("amount") or 0), int(rw.get("claimed") or 0)
+            if menge > geholt and rw.get("proofs"):
+                t = rw["token"]["address"]
+                tokens.append(Wallet.chain_adr(t))
+                mengen.append(menge)
+                beweise.append([bytes.fromhex(x[2:]) for x in rw["proofs"]])
+                neu[t.lower()] = menge - geholt
+    if not tokens:
+        return {}
+    daten_hex = "0x71ee95c0" + encode(["address[]", "address[]", "uint256[]", "bytes32[][]"],
+                                      [[Wallet.chain_adr(w.adr)] * len(tokens), tokens, mengen, beweise]).hex()
+    w.senden(MERKL_VERTEILER, daten_hex, was=was)
+    return neu
+
+
+def tresor_rein(w, b, router, e, cache, max_usd, eth_preis):
+    """ETH (ueber Reserve) -> Dollar-Token -> passender Anteil in den anderen Token -> Tresor einzahlen."""
+    tol = e["toleranz_prozent"]
+    reserve = int(e["strategie"]["gasreserve_usd"] / eth_preis * 1e18)
+    bedarf = int(max_usd / eth_preis * 1e18) - int(w.bestand(w.usd) / w.usd_skala / eth_preis * 1e18)
+    ueber = min(w.eth() - reserve, bedarf)
+    if ueber > 10 ** 14:
+        wp, wts = pool_fuer(w.chain, b["fabrik"], w.weth, w.usd, cache)
+        tauschen(w, router, w.weth, w.usd, wts, wp, ueber, tol, mit_eth=True)
+    stable = b["t0"] if b["t0"] in (w.usd,) else b["t1"]
+    andere = b["t1"] if stable == b["t0"] else b["t0"]
+    if stable != w.usd:
+        raise RuntimeError("Tresor ohne den Dollar-Token der Chain wird noch nicht unterstützt")
+    U = min(w.bestand(w.usd), int(max_usd * w.usd_skala))
+    if U < 2 * w.usd_skala:
+        raise RuntimeError("zu wenig Dollar-Token für den Tresor")
+    # Verhaeltnis laut Tresor: wie viel vom anderen Token je Dollar-Token
+    gross = 10 ** 24
+    args = (U, gross) if stable == b["t0"] else (gross, U)
+    pv = w.chain.call(b["vault"], aufruf("7a7af70d", *args))
+    a0, a1 = als_int(pv, 1), als_int(pv, 2)
+    if not a0 or not a1:
+        raise RuntimeError("Tresor-Vorschau ohne Verhältnis")
+    x_je_u = (a1 / a0) if stable == b["t0"] else (a0 / a1)  # roh anderer Token je roh Dollar
+    # Poolkurs: roh anderer Token je roh Dollar-Token
+    sq, _ = _kurs(w.chain, b["pool"])
+    p = (sq / Q96) ** 2  # roh t1 je roh t0 im Pool
+    pt0 = als_adr(w.chain.call(b["pool"], aufruf(SEL["token0"])))
+    q = p if pt0 == stable else 1 / p
+    s = int(U * x_je_u / (q + x_je_u) * 0.995)
+    tauschen(w, router, stable, andere, b["ts"], b["pool"], s, tol)
+    m_stable, m_andere = min(w.bestand(stable), U - s), w.bestand(andere)
+    args = (m_stable, m_andere) if stable == b["t0"] else (m_andere, m_stable)
+    pv = w.chain.call(b["vault"], aufruf("7a7af70d", *args))
+    anteile, d0, d1 = als_int(pv, 0), als_int(pv, 1), als_int(pv, 2)
+    w.freigeben(b["t0"], b["vault"], d0)
+    w.freigeben(b["t1"], b["vault"], d1)
+    vorher = w.bestand(b["vault"])
+    w.senden(b["vault"], "0x" + "00aeef8a" + _w(d0, d1, int(anteile * 0.98)), was="In Beefy-Tresor einzahlen")
+    return {"anteile": w.bestand(b["vault"]) - vorher}
+
+
+def tresor_raus(w, b, router, e, cache):
+    """Anteile abziehen, Merkl-Belohnung abholen, alles in natives ETH."""
+    anteile = w.bestand(b["vault"])
+    if anteile:
+        pw = w.chain.call(b["vault"], aufruf("0a28a477", anteile))
+        m0, m1 = als_int(pw, 0), als_int(pw, 1)
+        w.senden(b["vault"], "0x" + "a41fe49f" + _w(anteile, int(m0 * 0.97), int(m1 * 0.97)),
+                 was="Aus Beefy-Tresor abziehen")
+    try:
+        merkl_abholen(w)
+    except Exception as ex:
+        print("Merkl abholen:", ex)
+    in_eth(w, b, router, e, cache)
+
+
 KETTEN = {  # Chain -> (Chain-ID, WETH, Dollar-Token fuer den Weg Ausstieg -> ETH)
     "Base": (8453, WETH, USDC),
     "Robinhood": (4663, "0x0bd7d308f8e1639fab988df18a8011f41eacad73", "0x5fc5360d0400a0fd4f2af552add042d716f1d168"),
@@ -557,7 +659,12 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         sp = None
     # Testrunde je Chain: erste Position auf einer neuen Chain nur mit kleinem Betrag
     getestet = set(zustand.setdefault("getestet", ["Base"] if zustand.get("test_abgeschlossen") else []))
-    test_chain = (ist or sp or {}).get("chain")
+    def testkey(x):  # Testrunde je Chain und je Art (Tresor wird extra getestet)
+        if not x:
+            return None
+        art = x.get("art") or (farmen.get((x.get("chain"), x.get("pool"))) or {}).get("art")
+        return x["chain"] + ("·tresor" if art == "tresor" else "")
+    test_chain = testkey(ist or sp)
     test = bool(test_chain) and test_chain not in getestet
     max_usd = e["test_einsatz_usd"] if test else e["max_einsatz_usd"]
 
@@ -570,8 +677,15 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
             raise RuntimeError(f"kein passender Router auf {chain_name}")
         return w, b, r
 
-    # Gehoert die Position noch dem Bot?
-    if ist:
+    # Gehoert die Position noch dem Bot? (Tresor: Anteile noch da?)
+    if ist and ist.get("art") == "tresor":
+        w = wallet(ist["chain"])
+        if not w.bestand(ist["pool"]):
+            zustand.setdefault("geschlossen", []).append({**ist, "ende": int(time.time()), "grund": "keine Tresor-Anteile mehr"})
+            zustand["position"] = None
+            ist = None
+            meldungen.append("ℹ️ Bot-Wallet: keine Tresor-Anteile mehr (von Hand abgezogen?), Position wird vergessen")
+    elif ist:
         w = wallet(ist["chain"])
         npm = als_adr(_versuch(w.chain, ist["gauge"], SEL["nft"]))
         eigner = als_adr(_versuch(w.chain, npm, SEL["ownerOf"], ist["token_id"])) if npm else None
@@ -585,19 +699,25 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
 
     aendern = False
     if ist:
-        if not sp or (sp["chain"], sp["pool"]) != (ist["chain"], ist["pool"]) or sp["unten"] != ist["unten"] \
-                or sp["oben"] != ist["oben"]:
+        bereich_anders = ist.get("art") != "tresor" and (sp or {}).get("unten") != ist.get("unten") \
+            or ist.get("art") != "tresor" and (sp or {}).get("oben") != ist.get("oben")
+        if not sp or (sp["chain"], sp["pool"]) != (ist["chain"], ist["pool"]) or bereich_anders:
             aendern = True
         elif sp.get("compounds", 0) > ist.get("compounds", 0):
             aendern = True
         elif test and time.time() - ist.get("start", 0) > e["test_dauer_h"] * 3600:
             aendern = True
     if ist and aendern:
-        if time.time() - ist.get("start", 0) < e["sperre_sekunden"]:
+        if ist.get("art") != "tresor" and time.time() - ist.get("start", 0) < e["sperre_sekunden"]:
             meldungen.append("⏳ Bot-Wallet: Wechsel wartet auf die Sperrfrist nach dem Einzahlen")
             return meldungen
-        w, b, r = info(ist["chain"], ist["pool"], {"pool": ist["pool"], "gauge": ist["gauge"], "t0": ist["t0"], "t1": ist["t1"]})
-        raus(w, ist, b, r, e, cache)
+        if ist.get("art") == "tresor":
+            w = wallet(ist["chain"])
+            b, r = tresor_lesen(w, ist, cache)
+            tresor_raus(w, b, r, e, cache)
+        else:
+            w, b, r = info(ist["chain"], ist["pool"], {"pool": ist["pool"], "gauge": ist["gauge"], "t0": ist["t0"], "t1": ist["t1"]})
+            raus(w, ist, b, r, e, cache)
         eth_nach = w.eth() / 1e18
         usd = eth_nach * eth_preis
         zustand.setdefault("geschlossen", []).append({**ist, "ende": int(time.time()), "eth_danach": eth_nach,
@@ -605,7 +725,7 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         zustand["position"] = None
         ist = None
         if test:
-            zustand["getestet"] = sorted(getestet | {zustand["geschlossen"][-1]["chain"]})
+            zustand["getestet"] = sorted(getestet | {testkey(zustand["geschlossen"][-1])})
             test = False
             meldungen.append(f"✅ Bot-Wallet: Testrunde auf {zustand['geschlossen'][-1]['chain']} abgeschlossen, {eth_nach:.5f} ETH (~{usd:.2f} $). Ab jetzt voller Einsatz.")
             max_usd = e["max_einsatz_usd"]
@@ -614,7 +734,7 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
             zustand["raus_info"] = {"paar": zustand["geschlossen"][-1].get("paar"), "grund": letzte.get("grund"),
                                     "eth": eth_nach, "usd": round(usd, 2), "chain": zustand["geschlossen"][-1]["chain"]}
     if not ist and sp:
-        test = sp["chain"] not in set(zustand.get("getestet", []))
+        test = testkey(sp) not in set(zustand.get("getestet", []))
         max_usd = e["test_einsatz_usd"] if test else e["max_einsatz_usd"]
         ziel = sp["chain"]
         w = wallet(ziel)
@@ -632,16 +752,28 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
                     angekommen = bruecke(wa, ziel, w.chain.chain_id, menge, e, w)
                     meldungen.append(f"🌉 Bot-Wallet: {menge / 1e18:.5f} ETH von {andere} nach {ziel} "
                                      f"({angekommen / 1e18:.5f} angekommen)")
-        w, b, r = info(ziel, sp["pool"])
-        basis = {"chain": ziel, "pool": sp["pool"], "gauge": b["gauge"], "t0": b["t0"], "t1": b["t1"],
-                 "unten": sp["unten"], "oben": sp["oben"], "paar": sp["paar"], "compounds": sp.get("compounds", 0),
-                 "start": int(time.time())}
-        neu = rein(w, b, r, sp["unten"], sp["oben"], e, cache, max_usd, {w.weth: eth_preis},
-                   lambda x: zustand.__setitem__("position", {**basis, **x}))
+        fz = farmen.get((ziel, sp["pool"])) or {}
+        if fz.get("art") == "tresor":
+            b, r = tresor_lesen(w, fz, cache)
+            basis = {"chain": ziel, "pool": sp["pool"], "art": "tresor", "strategie_pool": fz["strategie_pool"],
+                     "want0": fz["want0"], "want1": fz["want1"], "gauge": None, "t0": fz["t0"], "t1": fz["t1"],
+                     "unten": sp["unten"], "oben": sp["oben"], "paar": sp["paar"],
+                     "compounds": sp.get("compounds", 0), "start": int(time.time())}
+            zustand["position"] = basis  # vor dem Einzahlen merken, damit nichts verloren geht
+            neu = tresor_rein(w, b, r, e, cache, max_usd, eth_preis)
+        else:
+            w, b, r = info(ziel, sp["pool"])
+            basis = {"chain": ziel, "pool": sp["pool"], "gauge": b["gauge"], "t0": b["t0"], "t1": b["t1"],
+                     "unten": sp["unten"], "oben": sp["oben"], "paar": sp["paar"], "compounds": sp.get("compounds", 0),
+                     "start": int(time.time())}
+            neu = rein(w, b, r, sp["unten"], sp["oben"], e, cache, max_usd, {w.weth: eth_preis},
+                       lambda x: zustand.__setitem__("position", {**basis, **x}))
         zustand["position"] = {**basis, **neu, "start": int(time.time())}
         ri = zustand.pop("raus_info", None)
         dex = (farmen.get((ziel, sp["pool"])) or {}).get("dex", "")
-        rein_txt = f"<b>{sp['paar']}</b> ({ziel} · {dex}) mit {_apr_txt(sp.get('apr_start'))} APR bei ±{sp.get('bereich_prozent')} %"
+        rein_txt = f"<b>{sp['paar']}</b> ({ziel} · {dex}) mit {_apr_txt(sp.get('apr_start'))} APR" + \
+            (f", Belohnung {fz.get('belohnung')}, Kampagne bis {fz.get('merkl', {}).get('ende')}" if fz.get("art") == "tresor"
+             else f" bei ±{sp.get('bereich_prozent')} %")
         if ri:
             meldungen.append(f"🔄 Bot-Wallet gewechselt: {ri['paar']} ({ri.get('chain')}) → {rein_txt}\nGrund: {ri.get('grund')}")
         else:
