@@ -772,7 +772,8 @@
       "0x4cd00e387622c35bddb9b4c962c136462338bc31"
     ],
     "max_bruecke_prozent": 2,
-    "reserve_andere_chain_usd": 1
+    "reserve_andere_chain_usd": 1,
+    "dexumschau": true
   },
   "meldungen": {
     "_hinweis": "Stefan 19.11.2026: Telegram nur noch fuer Bot-Wallet (rein/raus/Wechsel mit Grund und APR, Fehler) und aussergewoehnliche Farmen ab ausnahme_apr, die alle Regeln bestehen.",

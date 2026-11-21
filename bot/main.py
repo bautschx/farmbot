@@ -297,6 +297,12 @@ def scan(konfig):
                 print("Bot-Wallet Prüfung:", json.dumps(wzustand["pruefung"])[:1500])
             except Exception as ex:
                 print("Bot-Wallet Prüfung fehlgeschlagen:", ex)
+        if profil.get("dexumschau"):
+            try:
+                import dexumschau
+                speichern(os.path.join(DATEN, "dexumschau.json"), dexumschau.laufen(cache, top))
+            except Exception as ex:
+                print("DEX-Umschau:", ex)
         if profil.get("erkunden_robinhood"):
             try:
                 wzustand["erkundung_robinhood"] = ausfuehrung.erkunden_robinhood(konfig, daten, cache, profil["bot_adresse"])
