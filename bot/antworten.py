@@ -41,7 +41,11 @@ def main():
     if not r or not r.get("ok"):
         return
     neu = False
+    print("Updates:", len(r.get("result", [])))
     for u in r.get("result", []):
+        cq0 = u.get("callback_query") or {}
+        print(" -", u.get("update_id"), "Knopf" if cq0 else "anderes", (cq0.get("data") or "")[:8],
+              "eigener Chat" if str(((cq0.get("message") or {}).get("chat") or {}).get("id")) == chat else "anderer Chat")
         cq = u.get("callback_query") or {}
         msg = cq.get("message") or {}
         if str((msg.get("chat") or {}).get("id")) != chat:
