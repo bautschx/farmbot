@@ -96,12 +96,16 @@ def kerzen_ergaenzen(daten, cache, chains, ab_apr):
         if not alt or jetzt - alt["t"] > KERZEN_GUELTIG_S:
             if geholt >= KERZEN_JE_LAUF:
                 continue
-            try:
-                time.sleep(2.5)
-                alt = c[schl] = {"t": jetzt, "v": vola_aus_kerzen(_kerzen_holen(GT_NETZ[f["chain"]], pool))}
-            except Exception as ex:
-                print("Kerzen", f["paar"], pool[:10], ex)
-                alt = c[schl] = {"t": jetzt, "v": None}
+            alt = None
+            for versuch in range(2):
+                try:
+                    time.sleep(4 + 8 * versuch)  # GeckoTerminal-Grenze; beim zweiten Versuch laenger warten
+                    alt = c[schl] = {"t": jetzt, "v": vola_aus_kerzen(_kerzen_holen(GT_NETZ[f["chain"]], pool))}
+                    break
+                except Exception as ex:
+                    print("Kerzen", f["paar"], pool[:10], ex)
+            if alt is None:  # fehlgeschlagen: beim naechsten Lauf noch einmal versuchen
+                alt = c[schl] = {"t": jetzt - KERZEN_GUELTIG_S, "v": None}
             geholt += 1
         f["vola_kerzen_prozent"] = alt["v"]
         f["vola_eigen_prozent"] = f.get("vola_tag_prozent")
