@@ -33,7 +33,10 @@ def messpunkte(werte, jetzt):
     return wahl
 
 
-def anwenden(daten, zustand, chains):
+def anwenden(daten, zustand, chains, einstieg=True):
+    """einstieg=False (Stefan 22.11.2026 abends): Beim Einstieg zaehlt wieder der Messwert dieses Laufs.
+    Der Verlauf wird weiter mitgeschrieben; der Ausstieg bleibt geglaettet (simulation.py, Mittel der
+    letzten 3 Laeufe). Nachgespielt 28.10.-22.11.: 16 statt 5 Trades, +5,71 statt +1,68 $."""
     v = zustand.setdefault("apr_verlauf", {})
     jetzt = daten["zeit"]
     gesehen, neu = set(), []
@@ -55,6 +58,10 @@ def anwenden(daten, zustand, chains):
         wahl = messpunkte(h, jetzt)
         werte = [a for _, a in wahl]
         glatt = sum(werte) / len(werte) if len(werte) >= N else min(werte)
+        if not einstieg:
+            neu.append({**f, "apr_roh": f.get("apr"), "apr_min_2h": f.get("apr") or 0, "apr_laeufe": 99,
+                        "apr_glatt": round(glatt)})
+            continue
         neu.append({**f, "apr_roh": f.get("apr"), "apr": round(glatt), "apr_min_2h": min(werte),
                     "apr_laeufe": len(werte), "apr_spanne_min": round((wahl[0][0] - wahl[-1][0]) / 60)})
     for k in [k for k in v if k not in gesehen]:

@@ -289,7 +289,8 @@ def scan(konfig):
         except Exception as ex:
             print("Merkl-Tresore fehlgeschlagen:", ex)
         import glaettung
-        daten_echt = glaettung.anwenden(daten_echt, zustand, profil["strategie"]["chains"])
+        daten_echt = glaettung.anwenden(daten_echt, zustand, profil["strategie"]["chains"],
+                                           profil["strategie"].get("einstieg_glaettung", True))
         import netto
         try:
             netto.kerzen_ergaenzen(daten_echt, cache, profil["strategie"]["chains"],

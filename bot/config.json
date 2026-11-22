@@ -764,6 +764,7 @@
       "netto_min_prozent": 700,
       "verlustbremse_prozent": 3,
       "verlustbremse_sperre_stunden": 6,
+      "einstieg_glaettung": false,
       "handelszeit": {
         "_hinweis": "Stefan 22.11.2026: Aktien-Token schwanken waehrend der US-Handelszeit (Mo-Fr 9:30-16:00 New York) rund doppelt so stark. Ist die Boerse offen oder oeffnet sie in weniger als vorlauf_min, rechnet die Netto-APR mit der Schwankung der Handelszeit (bot/handelszeit.py, Stand in docs/data/handelszeit.json).",
         "aktiv": true,

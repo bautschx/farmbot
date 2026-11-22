@@ -123,7 +123,7 @@ def glaettung_je_bereich(daten, zustand, chains):
     return {**daten, "farmen": neu}
 
 
-GLAETTUNG = {"zeit": glaettung.anwenden, "laeufe": glaettung_laeufe, "aus": glaettung_aus,
+GLAETTUNG = {"zeit": glaettung.anwenden, "live": lambda d, z, c: glaettung.anwenden(d, z, c, False), "laeufe": glaettung_laeufe, "aus": glaettung_aus,
              "je_bereich": glaettung_je_bereich}
 
 # Regelsaetze. strategie: Aenderungen an echt.strategie; glaettung: siehe oben; handelszeit: Schwankung der
@@ -137,6 +137,7 @@ VARIANTEN = {
     "C neu: Glaettung nach Zeit": {"glaettung": "zeit"},
     "D neu: C + Handelszeit": {"glaettung": "zeit", "handelszeit": True},
     "E wie D, Einstieg ohne Glaettung": {"glaettung": "aus", "handelszeit": True},
+    "E2 live seit 22.11. 21:30 (Schalter einstieg_glaettung aus)": {"glaettung": "live", "handelszeit": True},
     "F wie D, Glaettung je Bereich": {"glaettung": "je_bereich", "handelszeit": True},
     "G wie D, raus vor Boersenstart": {"glaettung": "zeit", "handelszeit": True, "raus_vor_boerse": True},
 }
