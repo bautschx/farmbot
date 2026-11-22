@@ -278,6 +278,11 @@ def scan(konfig):
         import glaettung
         daten_echt = glaettung.anwenden(daten_echt, zustand, profil["strategie"]["chains"])
         import netto
+        try:
+            netto.kerzen_ergaenzen(daten_echt, cache, profil["strategie"]["chains"],
+                                   profil.get("rueckfrage", {}).get("puffer_ab_apr", 900))
+        except Exception as ex:
+            print("Kerzen fehlgeschlagen:", ex)
         daten_echt = netto.anwenden(daten_echt)
         ereignisse = simulation.laufen(daten_echt, konfig, zustand, profil=profil, top=top)
         if profil.get("live"):

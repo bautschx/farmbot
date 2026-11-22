@@ -42,3 +42,71 @@ def anwenden(daten):
         f["vola_kosten_apr"] = kosten
         f["netto_apr"] = None if kosten is None or f.get("apr") is None else round(f["apr"] - kosten, 1)
     return daten
+
+
+# ---------------------------------------------------------------- Kerzen von GeckoTerminal (22.11.2026)
+# Der eigene Verlauf hat nur einen Kurs alle 30 min. Fuer die aussichtsreichsten Farmen holt der Bot
+# zusaetzlich 15-min-Kerzen der letzten 24 h (Hoch, Tief, Schluss) und schaetzt daraus die Schwankung
+# auch innerhalb jeder Kerze (Parkinson-Schaetzer). Verwendet wird der hoehere der beiden Werte.
+import json
+import time
+import urllib.request
+
+GT_KERZEN = ("https://api.geckoterminal.com/api/v2/networks/{net}/pools/{pool}/ohlcv/minute"
+             "?aggregate=15&limit=96&currency=token")
+GT_NETZ = {"Robinhood": "robinhood", "Base": "base", "Arbitrum": "arbitrum", "OP Mainnet": "optimism"}
+KERZEN_JE_LAUF = 8          # GeckoTerminal erlaubt ca. 30 Abfragen pro Minute
+KERZEN_GUELTIG_S = 25 * 60  # pro Pool hoechstens einmal je Lauf holen
+
+
+def _kerzen_holen(net, pool):
+    req = urllib.request.Request(GT_KERZEN.format(net=net, pool=pool),
+                                 headers={"user-agent": "farmbot/1.0", "accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read())["data"]["attributes"]["ohlcv_list"]  # [ts, open, high, low, close, vol]
+
+
+def vola_aus_kerzen(kerzen):
+    """Tagesschwankung in % aus 15-min-Kerzen: hoeherer Wert aus Parkinson (Hoch/Tief je Kerze)
+    und Schluss-zu-Schluss. None bei zu wenig Kerzen."""
+    k = sorted((x for x in kerzen if x[2] and x[3] and x[4] and x[2] > 0 and x[3] > 0), key=lambda x: x[0])
+    if len(k) < 24:  # mindestens 6 h
+        return None
+    spanne = k[-1][0] - k[0][0] + 900
+    park = sum(math.log(x[2] / x[3]) ** 2 for x in k) / (4 * math.log(2))
+    schluss = sum(math.log(b[4] / a[4]) ** 2 for a, b in zip(k, k[1:]))
+    var_tag = max(park, schluss) / spanne * 86400
+    return round(math.sqrt(var_tag) * 100, 2)
+
+
+def kerzen_ergaenzen(daten, cache, chains, ab_apr):
+    """Holt fuer die besten Farmen (APR >= ab_apr auf den Bot-Chains) 15-min-Kerzen und setzt
+    vola_tag_prozent auf den hoeheren Wert aus eigenem Verlauf und Kerzen."""
+    c = cache.setdefault("kerzen_vola", {})
+    jetzt = time.time()
+    for k in [k for k, v in c.items() if jetzt - v["t"] > 86400]:
+        del c[k]
+    wahl = sorted((f for f in daten["farmen"] if f["chain"] in chains and (f.get("apr") or 0) >= ab_apr
+                   and GT_NETZ.get(f["chain"])), key=lambda f: -(f.get("apr") or 0))
+    geholt = 0
+    for f in wahl:
+        pool = f.get("strategie_pool") or f["pool"]  # Tresor: Kerzen des Pools dahinter
+        schl = f"{f['chain']}:{pool}"
+        alt = c.get(schl)
+        if not alt or jetzt - alt["t"] > KERZEN_GUELTIG_S:
+            if geholt >= KERZEN_JE_LAUF:
+                continue
+            try:
+                time.sleep(2.5)
+                alt = c[schl] = {"t": jetzt, "v": vola_aus_kerzen(_kerzen_holen(GT_NETZ[f["chain"]], pool))}
+            except Exception as ex:
+                print("Kerzen", f["paar"], pool[:10], ex)
+                alt = c[schl] = {"t": jetzt, "v": None}
+            geholt += 1
+        f["vola_kerzen_prozent"] = alt["v"]
+        f["vola_eigen_prozent"] = f.get("vola_tag_prozent")
+        werte = [x for x in (alt["v"], f.get("vola_tag_prozent")) if x is not None]
+        f["vola_tag_prozent"] = max(werte) if werte else None
+    print("Kerzen-Schwankung:", [(f["paar"], f.get("vola_eigen_prozent"), f.get("vola_kerzen_prozent"))
+                                 for f in wahl if "vola_kerzen_prozent" in f][:10])
+    return daten
