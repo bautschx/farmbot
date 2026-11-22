@@ -5,6 +5,11 @@ name: Antworten
 # Startsignal von cron-job.org (Job "Farmbot Antworten", alle 2 Minuten).
 on:
   workflow_dispatch:
+    inputs:
+      modus:
+        description: "leer = Knoepfe pruefen, testfrage = Test-Knopf senden"
+        required: false
+        default: ""
 
 permissions:
   actions: write
@@ -25,4 +30,4 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: python bot/antworten.py
+        run: python bot/antworten.py ${{ inputs.modus }}

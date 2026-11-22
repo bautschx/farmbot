@@ -55,6 +55,13 @@ def main():
         if str((msg.get("chat") or {}).get("id")) != chat:
             continue
         antwort = (cq.get("data") or "").split("|")[0]
+        if antwort == "test":
+            _tg("answerCallbackQuery", {"callback_query_id": cq["id"], "text": "Angekommen"})
+            _tg("editMessageReplyMarkup", {"chat_id": msg["chat"]["id"], "message_id": msg["message_id"],
+                                           "reply_markup": {"inline_keyboard": []}})
+            _tg("sendMessage", {"chat_id": msg["chat"]["id"], "text": "✅ Test: Dein Klick ist beim Bot angekommen."})
+            _tg("getUpdates", {"offset": u["update_id"] + 1, "timeout": 0})  # Test-Klick verbrauchen
+            continue
         if antwort not in ("ja", "nein"):
             continue
         if (msg.get("reply_markup") or {}).get("inline_keyboard"):
@@ -81,4 +88,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "testfrage":
+        print(_tg("sendMessage", {"chat_id": os.environ["TELEGRAM_CHAT_ID"].strip(),
+                                  "text": "🧪 Test: Bitte auf den Knopf drücken. Innerhalb von 2 Minuten kommt die Bestätigung.",
+                                  "reply_markup": {"inline_keyboard": [[{"text": "👆 Test-Klick", "callback_data": "test|1"}]]}})
+              and "Testfrage gesendet")
+    else:
+        main()
