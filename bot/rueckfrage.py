@@ -66,6 +66,19 @@ def antworten_holen(cache, echt_zustand):
     return ergebnis
 
 
+def _naechster_lauf():
+    """Uhrzeit (Wien) des naechsten Laufs (:00 / :30) plus ein paar Minuten Laufzeit."""
+    import datetime
+    try:
+        from zoneinfo import ZoneInfo
+        jetzt = datetime.datetime.now(ZoneInfo("Europe/Vienna"))
+    except Exception:
+        jetzt = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    m = 30 if jetzt.minute < 30 else 60
+    n = jetzt.replace(minute=0, second=0, microsecond=0) + datetime.timedelta(minutes=m + 5)
+    return n.strftime("%H:%M")
+
+
 def fragen(daten, konfig, cache, echt_zustand, top):
     """Neue Rueckfragen stellen. Jede Farm hoechstens alle frage_pause_stunden einmal."""
     import paarfilter
@@ -109,7 +122,8 @@ def fragen(daten, konfig, cache, echt_zustand, top):
                   if f.get("art") == "tresor" else "")
         text = (f"❓ <b>Soll ich einsteigen?</b>\n<b>{f['paar']}</b> ({f['chain']} · {f['dex']}): {apr_txt} % APR{bereich}"
                 f"\n{grund}\n" + (links.fuer_farm(f) or "") + tresor +
-                "\n\nAntwort wird beim nächsten Lauf (spätestens 30 min) umgesetzt.")
+                f"\n\nDeine Antwort holt der Bot beim nächsten Lauf ab (ca. {_naechster_lauf()} Uhr). "
+                "Dann verschwinden die Knöpfe und du bekommst eine Bestätigung.")
         r = _api("sendMessage", {"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True,
                                  "reply_markup": {"inline_keyboard": [[
                                      {"text": "✅ Ja, einsteigen", "callback_data": f"ja|{f['pool']}"},
