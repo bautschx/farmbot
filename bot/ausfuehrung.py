@@ -383,12 +383,44 @@ def position_lesen(w, npm, token_id):
             "unten": als_int(r, 5, signed=True), "oben": als_int(r, 6, signed=True), "L": als_int(r, 7)}
 
 
+WARNUNGEN = []  # (schluessel, text): abgefangene Fehler dieses Laufs, die Stefan erfahren soll
+
+
+def _warnung(schluessel, text):
+    print("Warnung:", text)
+    WARNUNGEN.append((schluessel, text))
+
+
+def _erhalten(beleg, token, empfaenger):
+    """Summe aller Transfers von token an empfaenger in einem Transaktionsbeleg (Rohwert)."""
+    summe = 0
+    for lg in (beleg or {}).get("logs", []):
+        t = lg.get("topics") or []
+        if (lg.get("address") or "").lower() == token and len(t) >= 3 and t[0] == TOPIC_TRANSFER \
+                and int(t[2], 16) == int(empfaenger, 16):
+            d = lg.get("data") or "0x"
+            summe += int(d, 16) if len(d) > 2 else 0
+    return summe
+
+
 def raus(w, ist, b, router, e, cache):
-    """Abziehen aus Gauge, Liquiditaet raus, alles in USDC tauschen (ausser Gasreserve)."""
+    """Abziehen aus Gauge, Liquiditaet raus, alles in USDC tauschen (ausser Gasreserve).
+    Gibt Messwerte fuers Buch zurueck (22.11.2026): usd_aus = Dollar-Erloes der Position,
+    belohnung_roh = beim Abziehen wirklich erhaltene Belohnung (aus dem Beleg gelesen).
+    Die Messung darf den Ausstieg nie aufhalten: Fehler dabei werden nur gedruckt."""
     tid, npm, gauge = ist["token_id"], b["npm"], b["gauge"]
+    mess = {}
     eigner = als_adr(w.chain.call(npm, aufruf(SEL["ownerOf"], tid)))
     if eigner == gauge.lower():
-        w.senden(gauge, "0x" + SEL["withdraw"] + _w(tid), was="Aus Gauge abziehen (inkl. Belohnung)")
+        beleg = w.senden(gauge, "0x" + SEL["withdraw"] + _w(tid), was="Aus Gauge abziehen (inkl. Belohnung)")
+        mess["vollstaendig"] = True  # Ausstieg laeuft in diesem Aufruf von Anfang an (kein fortgesetzter Versuch)
+        try:
+            bel = (b.get("belohnung") or "").lower()
+            if bel and bel != NULL and bel not in (b["t0"], b["t1"], w.usd, w.weth):
+                mess["belohnung_roh"] = _erhalten(beleg, bel, w.adr)
+                mess["belohnung_token"] = bel
+        except Exception as ex:
+            print("Messung Belohnung:", ex)
     pos = position_lesen(w, npm, tid)
     if pos["L"]:
         w.senden(npm, "0x" + SEL["decreaseLiquidity"] + _w(tid, pos["L"], 0, 0, int(time.time()) + 600),
@@ -398,12 +430,15 @@ def raus(w, ist, b, router, e, cache):
         w.senden(npm, "0x" + SEL["burn"] + _w(tid), was="Position schließen")
     except Exception as ex:
         print("burn:", ex)
-    in_eth(w, b, router, e, cache)
+    usd_roh = in_eth(w, b, router, e, cache)
+    mess["usd_aus"] = usd_roh / w.usd_skala
+    return mess
 
 
 def in_eth(w, b, router, e, cache):
     """Stefan 18.11.2026: beim Ausstieg alles in den Gastoken ETH, damit nie das Gas ausgeht.
-    Weg: Paar-Token und Belohnung -> w.usd (tiefste Pools), dann w.usd -> w.weth -> ETH."""
+    Weg: Paar-Token und Belohnung -> w.usd (tiefste Pools), dann w.usd -> w.weth -> ETH.
+    Gibt die Menge w.usd (Rohwert) zurueck, die vor dem Tausch in ETH da war (Erloes der Position)."""
     in_usdc(w, b, router, e, cache)
     m = w.bestand(w.usd)
     if m > w.usd_skala // 10:
@@ -412,6 +447,7 @@ def in_eth(w, b, router, e, cache):
     weth = w.bestand(w.weth)
     if weth:
         w.senden(w.weth, "0x" + SEL["wethWithdraw"] + _w(weth), was="WETH in ETH")
+    return m
 
 
 def in_usdc(w, b, router, e, cache):
@@ -421,17 +457,22 @@ def in_usdc(w, b, router, e, cache):
         m = w.bestand(t)
         if not m:
             continue
-        if t in (b["t0"], b["t1"]):
+        paar_token = t in (b["t0"], b["t1"])
+        if paar_token:
             pool, ts = b["pool"], b["ts"]
         else:
             pool, ts = pool_fuer(w.chain, b["fabrik"], t, w.usd, cache)
         if not pool:
-            print("kein Tauschpool fuer", t)
+            print("kein Tauschpool fuer", t)  # Belohnung: tauscht spaeter das Aufraeumen (anderer Pool-Bestand)
             continue
         try:
             tauschen(w, router, t, w.usd, ts, pool, m, tol)
         except Exception as ex:
             print("Tausch in w.usd:", ex)
+            if paar_token:  # der Erloes der Position steckt dann noch im Paar-Token und schwankt mit dessen Kurs
+                _warnung(f"tausch:{w.chain.name}:{t}",
+                         f"Token {t[:10]}… aus der beendeten Position konnte nicht in Dollar getauscht werden "
+                         f"({str(ex)[:120]}). Er liegt weiter in der Wallet auf {w.chain.name}.")
 
 
 def rein(w, b, router, unten, oben, e, cache, max_usd, preise, merken):
@@ -476,10 +517,12 @@ def rein(w, b, router, unten, oben, e, cache, max_usd, preise, merken):
             tid = int(lg["topics"][3], 16)
     if tid is None:
         raise RuntimeError("Position angelegt, aber Nummer nicht gefunden")
-    merken({"token_id": tid, "block_einzahlung": 0})  # falls das Einzahlen scheitert, ist die Nummer bekannt
+    usd_ein = round(usdc / w.usd_skala, 4)  # eingesetzte Dollar (fuers Buch: echtes Ergebnis beim Ausstieg)
+    # falls das Einzahlen scheitert, ist die Nummer bekannt
+    merken({"token_id": tid, "block_einzahlung": 0, "usd_ein": usd_ein})
     w.senden(b["npm"], "0x" + SEL["approve"] + _w(b["gauge"], tid), was="Freigabe Position für Gauge")
     beleg = w.senden(b["gauge"], "0x" + SEL["deposit"] + _w(tid), was="In Gauge einzahlen")
-    return {"token_id": tid, "block_einzahlung": int(beleg["blockNumber"], 16)}
+    return {"token_id": tid, "block_einzahlung": int(beleg["blockNumber"], 16), "usd_ein": usd_ein}
 
 
 # ---------------------------------------------------------------- Hauptschritt
@@ -611,12 +654,16 @@ def aufraeumen(w, fabrik, e, cache, tokens, preise):
             continue
         pool, ts = pool_fuer(w.chain, fabrik, t, w.usd, cache)
         if not pool:
+            _warnung(f"aufraeumen:{w.chain.name}:{t}", f"Für den Rest von Token {t[:10]}… auf {w.chain.name} "
+                     "gibt es keinen Tauschpool. Er bleibt in der Wallet liegen.")
             continue
         try:
             tauschen(w, router, t, w.usd, ts, pool, m, tol)
             erledigt.append(t)
         except Exception as ex:
             print("Aufräumen", t, ex)
+            _warnung(f"aufraeumen:{w.chain.name}:{t}", f"Der Rest von Token {t[:10]}… auf {w.chain.name} konnte "
+                     f"nicht in ETH getauscht werden ({str(ex)[:120]}). Er bleibt in der Wallet liegen.")
     usd = w.bestand(w.usd)
     if usd >= ab * w.usd_skala:
         wp, wts = pool_fuer(w.chain, fabrik, w.weth, w.usd, cache)
@@ -671,12 +718,81 @@ def bruecke(w_von, ziel_name, ziel_id, menge, e, w_nach):
     raise RuntimeError("Brücke: ETH noch nicht angekommen (wird beim nächsten Lauf weiter verwendet)")
 
 
+def _echt_ergebnis(w, ist, echt, preise, eth_preis, log):
+    """Gemessenes Ergebnis einer beendeten Position fuers Buch (22.11.2026):
+    usd_ein/usd_aus = Dollar-Token beim Einstieg eingesetzt / beim Ausstieg erhalten (an der Chain gelesen),
+    belohnung_echt = beim Abziehen wirklich erhaltene Belohnung (Stueck, aus dem Beleg),
+    gas_usd = Gas aller Transaktionen dieser Position, ergebnis_echt_usd = usd_aus - usd_ein + Belohnung - Gas.
+    Nicht enthalten: die Tausche ETH <-> Dollar davor und danach (dafuer eth_davor/eth_danach)."""
+    r = {"eth_preis_aus": round(eth_preis, 2)}
+    bel_usd = None
+    if echt.get("belohnung_roh") is not None:
+        token = echt["belohnung_token"]
+        dez = als_int(w.chain.call(token, aufruf(SEL["decimals"]))) or 18
+        menge = echt["belohnung_roh"] / 10 ** dez
+        r["belohnung_echt"] = round(menge, 6)
+        kurs = preise.get((w.chain.name, token))
+        if kurs:
+            bel_usd = menge * kurs
+            r["belohnung_echt_usd"] = round(bel_usd, 4)
+    if ist.get("rein_ab"):
+        gas_eth = sum(x.get("gas_eth", 0) for x in log
+                      if x.get("zeit", 0) >= ist["rein_ab"] and x.get("chain") == w.chain.name)
+        r["gas_usd"] = round(gas_eth * eth_preis, 4)
+    # Dollar-Erloes nur werten, wenn der Ausstieg in einem Zug lief. Bei einem fortgesetzten Versuch kann ein
+    # Teil schon beim ersten Mal in ETH getauscht worden sein - dann waere die Zahl falsch.
+    if echt.get("usd_aus") is not None and echt.get("vollstaendig"):
+        r["usd_aus"] = round(echt["usd_aus"], 4)
+        if ist.get("usd_ein"):
+            r["ergebnis_echt_usd"] = round(echt["usd_aus"] - ist["usd_ein"] + (bel_usd or 0) - r.get("gas_usd", 0), 2)
+    return r
+
+
+def _usd_txt(x):
+    return f"{x:+.2f}".replace(".", ",") + " $"
+
+
+def _echt_text(eintrag):
+    """Eine Zeile fuer Telegram: gemessenes Ergebnis der beendeten Position (leer, wenn nicht messbar)."""
+    if eintrag.get("ergebnis_echt_usd") is None:
+        return ""
+    teile = []
+    if eintrag.get("belohnung_echt_usd") is not None:
+        teile.append("Belohnung " + _usd_txt(eintrag["belohnung_echt_usd"]))
+    if eintrag.get("usd_aus") is not None and eintrag.get("usd_ein"):
+        teile.append("Kurs und Tauschkosten " + _usd_txt(eintrag["usd_aus"] - eintrag["usd_ein"]))
+    if eintrag.get("gas_usd") is not None:
+        teile.append("Gas " + _usd_txt(-eintrag["gas_usd"]))
+    return "Ergebnis gemessen: " + _usd_txt(eintrag["ergebnis_echt_usd"]) + (f" ({', '.join(teile)})" if teile else "")
+
+
+def warnungen_melden(zustand, pause_h=12):
+    """Macht aus den abgefangenen Fehlern dieses Laufs Meldungen. Dieselbe Warnung hoechstens alle pause_h
+    Stunden; jede landet ausserdem in zustand["fehler"] (docs/data/bot_wallet.json)."""
+    gemeldet = zustand.setdefault("warnung_gemeldet", {})
+    jetzt = int(time.time())
+    for k in [k for k, t in gemeldet.items() if jetzt - t > 7 * 86400]:
+        del gemeldet[k]
+    texte = []
+    for schl, text in WARNUNGEN:
+        if jetzt - gemeldet.get(schl, 0) < pause_h * 3600:
+            continue
+        gemeldet[schl] = jetzt
+        texte.append("⚠️ Bot-Wallet: " + text)
+        zustand.setdefault("fehler", []).append({"zeit": jetzt, "text": text[:300]})
+    if texte:
+        zustand["fehler"] = zustand["fehler"][-20:]
+    del WARNUNGEN[:]
+    return texte
+
+
 def schritt(konfig, daten, soll, cache, zustand, schluessel):
     """Gleicht die Wallet an den Soll-Zustand (Profil echt) an. Gibt Meldungen zurueck.
     Mehrere Chains (Base/Aero, Robinhood/Up33): der Topf liegt immer auf einer Chain; bei Bedarf Relay-Brücke."""
     e = konfig["echt"]
     log = zustand.setdefault("protokoll", [])
     wallets = {}
+    del WARNUNGEN[:]
 
     def wallet(name):
         if name not in wallets:
@@ -764,17 +880,22 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         if ist.get("art") != "tresor" and time.time() - ist.get("start", 0) < e["sperre_sekunden"]:
             meldungen.append("⏳ Bot-Wallet: Wechsel wartet auf die Sperrfrist nach dem Einzahlen")
             return meldungen
+        echt = {}
         if ist.get("art") == "tresor":
             w = wallet(ist["chain"])
             b, r = tresor_lesen(w, ist, cache)
             tresor_raus(w, b, r, e, cache)
         else:
             w, b, r = info(ist["chain"], ist["pool"], {"pool": ist["pool"], "gauge": ist["gauge"], "t0": ist["t0"], "t1": ist["t1"]})
-            raus(w, ist, b, r, e, cache)
+            echt = raus(w, ist, b, r, e, cache) or {}
         eth_nach = w.eth() / 1e18
         usd = eth_nach * eth_preis
-        zustand.setdefault("geschlossen", []).append({**ist, "ende": int(time.time()), "eth_danach": eth_nach,
-                                                       "usd_danach": round(usd, 2)})
+        eintrag = {**ist, "ende": int(time.time()), "eth_danach": eth_nach, "usd_danach": round(usd, 2)}
+        try:  # gemessenes Ergebnis fuers Buch; darf den Ablauf nie stoeren
+            eintrag.update(_echt_ergebnis(w, ist, echt, preise, eth_preis, log))
+        except Exception as ex:
+            print("Echtes Ergebnis:", ex)
+        zustand.setdefault("geschlossen", []).append(eintrag)
         zustand["position"] = None
         ist = None
         if test:
@@ -785,7 +906,8 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         else:
             letzte = (soll.get("geschlossen") or [{}])[-1]
             zustand["raus_info"] = {"paar": zustand["geschlossen"][-1].get("paar"), "grund": letzte.get("grund"),
-                                    "eth": eth_nach, "usd": round(usd, 2), "chain": zustand["geschlossen"][-1]["chain"]}
+                                    "eth": eth_nach, "usd": round(usd, 2), "chain": zustand["geschlossen"][-1]["chain"],
+                                    "echt": _echt_text(eintrag)}
     if not ist and sp:
         test = testkey(sp) not in set(zustand.get("getestet", []))
         max_usd = e["test_einsatz_usd"] if test else e["max_einsatz_usd"]
@@ -818,7 +940,13 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
             w, b, r = info(ziel, sp["pool"])
             basis = {"chain": ziel, "pool": sp["pool"], "gauge": b["gauge"], "t0": b["t0"], "t1": b["t1"],
                      "unten": sp["unten"], "oben": sp["oben"], "paar": sp["paar"], "compounds": sp.get("compounds", 0),
-                     "start": int(time.time())}
+                     "start": int(time.time()),
+                     # fuers Buch (22.11.2026): ab wann die Transaktionen dieser Position zaehlen, ETH-Kurs beim Einstieg
+                     "rein_ab": int(time.time()), "eth_preis_ein": round(eth_preis, 2)}
+            try:
+                basis["eth_davor"] = round(w.eth() / 1e18, 8)
+            except Exception as ex:
+                print("ETH-Stand vor Einstieg:", ex)
             neu = rein(w, b, r, sp["unten"], sp["oben"], e, cache, max_usd, {w.weth: eth_preis},
                        lambda x: zustand.__setitem__("position", {**basis, **x}))
         zustand["position"] = {**basis, **neu, "start": int(time.time())}
@@ -829,13 +957,15 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
             (f", Belohnung {fz.get('belohnung')}, Kampagne bis {fz.get('merkl', {}).get('ende')}" if fz.get("art") == "tresor"
              else f" bei ±{sp.get('bereich_prozent') or sp.get('bereich')} %")
         if ri:
-            meldungen.append(f"🔄 Bot-Wallet gewechselt: {ri['paar']} ({ri.get('chain')}) → {rein_txt}\nGrund: {ri.get('grund')}")
+            meldungen.append(f"🔄 Bot-Wallet gewechselt: {ri['paar']} ({ri.get('chain')}) → {rein_txt}\nGrund: {ri.get('grund')}"
+                             + (f"\n{ri['echt']}" if ri.get("echt") else ""))
         else:
             meldungen.append("💰 Bot-Wallet rein: " + rein_txt + (" – Testrunde mit kleinem Betrag" if test else ""))
     elif zustand.get("raus_info"):
         ri = zustand.pop("raus_info")
         meldungen.append(f"💰 Bot-Wallet raus: {ri['paar']} ({ri.get('grund')}). Keine Farm über "
-                         f"{e['strategie']['einstieg_apr']} %, wartet in ETH: {ri['eth']:.5f} ETH (~{ri['usd']} $)")
+                         f"{e['strategie']['einstieg_apr']} %, wartet in ETH: {ri['eth']:.5f} ETH (~{ri['usd']} $)"
+                         + (f"\n{ri['echt']}" if ri.get("echt") else ""))
     # Reste in natives ETH (nur wenn gerade keine Position offen ist)
     if not zustand.get("position"):
         for name in e["strategie"]["chains"]:
@@ -849,6 +979,9 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
                     print("Aufgeräumt auf", name, weg)
             except Exception as ex:
                 print("Aufräumen", name, ex)
+                _warnung(f"aufraeumen:{name}", f"Aufräumen der Reste auf {name} ist fehlgeschlagen ({str(ex)[:120]}).")
+    # abgefangene Fehler melden (22.11.2026): dieselbe Warnung hoechstens alle 12 Stunden
+    meldungen.extend(warnungen_melden(zustand))
     # Kennzahlen je Chain
     try:
         zustand["eth_je_chain"] = {n: round(wallet(n).eth() / 1e18, 6) for n in e["strategie"]["chains"]}

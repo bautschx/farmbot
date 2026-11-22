@@ -106,7 +106,7 @@ def fragen(daten, konfig, cache, echt_zustand, top):
         if jetzt - gefragt.get(f["pool"], 0) < rk["frage_pause_stunden"] * 3600:
             continue
         apr = f.get("apr") or 0
-        if (f.get("apr_laeufe") or 99) < 3 or (f.get("apr_min_2h") or 9999) < 500:
+        if (f.get("apr_laeufe") or 99) < 3 or (f["apr_min_2h"] if f.get("apr_min_2h") is not None else 9999) < 500:
             continue  # unsicherer Messwert, nicht fragen
         if st.get("netto_min_prozent") and (f.get("netto_apr") is None or f["netto_apr"] < st["netto_min_prozent"]):
             continue  # nach Abzug des Kursrisikos nicht mehr attraktiv

@@ -75,6 +75,19 @@ def telegram(text, wichtig=False):
         return False
 
 
+def warnen(cache, schluessel, text, pause_h=12):
+    """Warnung per Telegram; dieselbe (schluessel) hoechstens alle pause_h Stunden, damit ein Fehler,
+    der bei jedem Lauf wieder auftritt, nicht alle 30 Minuten gemeldet wird."""
+    gemeldet = cache.setdefault("warnungen", {})
+    if time.time() - gemeldet.get(schluessel, 0) < pause_h * 3600:
+        print("Warnung (schon gemeldet):", text[:200])
+        return False
+    if telegram(text, wichtig=True):
+        gemeldet[schluessel] = int(time.time())
+        return True
+    return False
+
+
 def diagnose(konfig):
     S = scanner.S
     for name, cfg in konfig["chains"].items():
@@ -283,6 +296,25 @@ def scan(konfig):
                                    profil.get("rueckfrage", {}).get("puffer_ab_apr", 900))
         except Exception as ex:
             print("Kerzen fehlgeschlagen:", ex)
+        # Aktien-Token: solange die US-Boerse offen ist, zaehlt die Schwankung der Handelszeit (22.11.2026).
+        # Der Stand je Token liegt in docs/data/handelszeit.json und wird bei jedem Lauf fortgeschrieben.
+        hz_cfg = profil["strategie"].get("handelszeit") or {}
+        if hz_cfg.get("aktiv"):
+            try:
+                import handelszeit
+                hz_pfad = os.path.join(DATEN, "handelszeit.json")
+                hz = laden(hz_pfad, {})
+                dollar_sets = {c: set(v["dollar"]) for c, v in konfig["chains"].items()}
+                handelszeit.fortschreiben(hz, daten_echt, dollar_sets, profil["strategie"]["chains"])
+                daten_echt = handelszeit.anwenden(daten_echt, hz, dollar_sets, profil["strategie"]["chains"],
+                                                  hz_cfg.get("vorlauf_min", 60))
+                speichern(hz_pfad, hz)
+                zustand["handelszeit"] = hz.get("stand")
+            except Exception as ex:
+                zustand["handelszeit"] = {"fehler": str(ex)[:200], "zeit": daten["zeit"]}
+                print("Handelszeit fehlgeschlagen:", ex)
+                warnen(cache, "handelszeit", "⚠️ Farmbot: Die Schwankung der US-Handelszeit konnte nicht berechnet "
+                       f"werden ({str(ex)[:150]}). Aktien-Farmen werden so lange wie früher bewertet.")
         daten_echt = netto.anwenden(daten_echt)
         ereignisse = simulation.laufen(daten_echt, konfig, zustand, profil=profil, top=top)
         if profil.get("live"):
@@ -315,6 +347,11 @@ def scan(konfig):
                 wzustand["fehler"] = wzustand["fehler"][-20:]
                 telegram(f"⚠️ Bot-Wallet Fehler: {str(ex)[:300]}", wichtig=True)
                 print("Bot-Wallet Fehler:", ex)
+                try:  # Warnungen, die vor dem Abbruch gesammelt wurden, nicht verlieren
+                    for m in ausfuehrung.warnungen_melden(wzustand):
+                        telegram(m, wichtig=True)
+                except Exception as ex2:
+                    print("Warnungen:", ex2)
         else:
             try:
                 wzustand["pruefung"] = ausfuehrung.pruefen(konfig, daten, cache, profil["bot_adresse"])
