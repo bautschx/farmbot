@@ -81,7 +81,9 @@ def basis_lesen(chain, f, bot):
         raise RuntimeError("Positionsvertrag (nft) weder am Gauge noch am Pool lesbar")
     fabrik = als_adr(chain.call(pool, aufruf(SEL["factory"])))
     ts = als_int(chain.call(pool, aufruf(SEL["tickSpacing"])), signed=True)
-    belohnung = als_adr(_versuch(chain, gauge, SEL["rewardToken"])) or f.get("belohnung_adr")
+    belohnung = als_adr(_versuch(chain, gauge, SEL["rewardToken"]) or "0x")
+    if not belohnung or belohnung == NULL:
+        belohnung = (f.get("belohnung_adr") or NULL).lower()
     npm_fabrik = als_adr(_versuch(chain, npm, SEL["factory"]))
     return {"pool": pool, "gauge": gauge, "npm": npm, "fabrik": fabrik, "npm_fabrik": npm_fabrik,
             "ts": ts, "belohnung": belohnung, "t0": f["t0"], "t1": f["t1"]}
@@ -579,6 +581,46 @@ def tresor_raus(w, b, router, e, cache):
     in_eth(w, b, router, e, cache)
 
 
+def aufraeumen(w, fabrik, e, cache, tokens, preise):
+    """Reste (Belohnungstoken, Dollar-Token, WETH) in natives ETH tauschen, sobald sie mehr als
+    aufraeumen_ab_usd wert sind (Stefan 22.11.2026). Gibt die getauschten Kuerzel zurueck."""
+    router = (cache.get("router") or {}).get(fabrik)
+    if not router:
+        return []
+    tol, ab = e["toleranz_prozent"], e.get("aufraeumen_ab_usd", 0.1)
+    erledigt = []
+    for t in tokens:
+        t = t.lower()
+        if t in (w.usd, w.weth):
+            continue
+        m = w.bestand(t)
+        kurs = preise.get((w.chain.name, t))
+        if not m or not kurs:
+            continue
+        dez = als_int(w.chain.call(t, aufruf(SEL["decimals"]))) or 18
+        if m / 10 ** dez * kurs < ab:
+            continue
+        pool, ts = pool_fuer(w.chain, fabrik, t, w.usd, cache)
+        if not pool:
+            continue
+        try:
+            tauschen(w, router, t, w.usd, ts, pool, m, tol)
+            erledigt.append(t)
+        except Exception as ex:
+            print("Aufräumen", t, ex)
+    usd = w.bestand(w.usd)
+    if usd >= ab * w.usd_skala:
+        wp, wts = pool_fuer(w.chain, fabrik, w.weth, w.usd, cache)
+        if wp:
+            tauschen(w, router, w.usd, w.weth, wts, wp, usd, tol)
+            erledigt.append(w.usd)
+    weth = w.bestand(w.weth)
+    if weth * (preise.get("_eth") or 0) / 1e18 >= ab:
+        w.senden(w.weth, "0x" + SEL["wethWithdraw"] + _w(weth), was="WETH in ETH")
+        erledigt.append(w.weth)
+    return erledigt
+
+
 KETTEN = {  # Chain -> (Chain-ID, WETH, Dollar-Token fuer den Weg Ausstieg -> ETH)
     "Base": (8453, WETH, USDC),
     "Robinhood": (4663, "0x0bd7d308f8e1639fab988df18a8011f41eacad73", "0x5fc5360d0400a0fd4f2af552add042d716f1d168"),
@@ -649,6 +691,8 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         for t, k in ((f["t0"], "p0"), (f["t1"], "p1")):
             if s.get(k):
                 preise[(f["chain"], t)] = s[k]
+        if f.get("belohnung_adr") and f.get("belohnung_preis"):
+            preise[(f["chain"], f["belohnung_adr"].lower())] = f["belohnung_preis"]
     eth_preis = preise.get(("Base", WETH)) or preise.get(("Robinhood", KETTEN["Robinhood"][1]))
     if not eth_preis:
         meldungen.append("⚠️ Bot-Wallet: kein ETH-Kurs, nichts getan")
@@ -782,6 +826,19 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         ri = zustand.pop("raus_info")
         meldungen.append(f"💰 Bot-Wallet raus: {ri['paar']} ({ri.get('grund')}). Keine Farm über "
                          f"{e['strategie']['einstieg_apr']} %, wartet in ETH: {ri['eth']:.5f} ETH (~{ri['usd']} $)")
+    # Reste in natives ETH (nur wenn gerade keine Position offen ist)
+    if not zustand.get("position"):
+        for name in e["strategie"]["chains"]:
+            try:
+                kc = konfig["chains"][name]
+                wn = wallet(name)
+                preise_n = {k: v for k, v in preise.items()}
+                preise_n["_eth"] = eth_preis
+                weg = aufraeumen(wn, kc["tausch_fabrik"], e, cache, kc.get("aufraeumen", []), preise_n)
+                if weg:
+                    print("Aufgeräumt auf", name, weg)
+            except Exception as ex:
+                print("Aufräumen", name, ex)
     # Kennzahlen je Chain
     try:
         zustand["eth_je_chain"] = {n: round(wallet(n).eth() / 1e18, 6) for n in e["strategie"]["chains"]}

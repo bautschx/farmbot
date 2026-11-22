@@ -106,6 +106,8 @@ def fragen(daten, konfig, cache, echt_zustand, top):
         if jetzt - gefragt.get(f["pool"], 0) < rk["frage_pause_stunden"] * 3600:
             continue
         apr = f.get("apr") or 0
+        if (f.get("apr_laeufe") or 99) < 3 or (f.get("apr_min_2h") or 9999) < 500:
+            continue  # unsicherer Messwert, nicht fragen
         ok, art = paarfilter.erlaubt(f, dollar.get(f["chain"], set()), top or {}, st["max_kursabweichung_prozent"])
         if apr >= rk["ausnahme_apr"]:
             grund = "außergewöhnlich hoch" + ("" if ok else f" (Paar außerhalb deiner Regel: {art})") + \

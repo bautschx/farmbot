@@ -60,6 +60,10 @@
           "seed_pool": "0x868eed6bad4bd368cd053b766f84cc727697589a",
           "belohnung": "0x3f5bf3edac59d650d8fdf9657a71f2f904a3a4ee"
         }
+      ],
+      "tausch_fabrik": "0x9cb220581b91b0c83223012fe69688b92ad07a76",
+      "aufraeumen": [
+        "0x3f5bf3edac59d650d8fdf9657a71f2f904a3a4ee"
       ]
     },
     "OP Mainnet": {
@@ -127,6 +131,10 @@
       ],
       "router_vorschlaege": [
         "0xC062b870E813fcA720f1e002c234369Ab3aB9415"
+      ],
+      "tausch_fabrik": "0x1ac9db4a2608ba45d6127b1737949b51bb54b7f3",
+      "aufraeumen": [
+        "0x57c0e45cb534413d1c20a4240955d6bb250bb4f1"
       ]
     },
     "Avalanche": {
@@ -750,7 +758,9 @@
       "compound_ab_prozent": 5,
       "top_n": 20,
       "max_kursabweichung_prozent": 5,
-      "auto_bis_apr": 3000
+      "auto_bis_apr": 3000,
+      "anstieg_6h_prozent": 3,
+      "anstieg_ende_6h_prozent": 1
     },
     "bot_adresse": "0x228561ca396631b51b63369c882fd6c7f7f2e9fd",
     "max_einsatz_usd": 100,
@@ -781,7 +791,8 @@
       "aktiv": true,
       "min_usd_tag": 20,
       "min_tvl_usd": 1000
-    }
+    },
+    "aufraeumen_ab_usd": 0.1
   },
   "meldungen": {
     "_hinweis": "Stefan 19.11.2026: Telegram nur noch fuer Bot-Wallet (rein/raus/Wechsel mit Grund und APR, Fehler) und aussergewoehnliche Farmen ab ausnahme_apr, die alle Regeln bestehen.",

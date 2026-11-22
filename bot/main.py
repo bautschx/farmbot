@@ -275,7 +275,13 @@ def scan(konfig):
             print("Merkl-Tresore:", [(t["paar"], t["apr"], t["alle_regeln_ok"]) for t in tresore])
         except Exception as ex:
             print("Merkl-Tresore fehlgeschlagen:", ex)
+        import glaettung
+        daten_echt = glaettung.anwenden(daten_echt, zustand, profil["strategie"]["chains"])
         ereignisse = simulation.laufen(daten_echt, konfig, zustand, profil=profil, top=top)
+        if profil.get("live"):
+            for x in ereignisse:
+                if x.startswith("📈"):
+                    telegram(x, wichtig=True)
         if profil.get("live"):
             try:
                 rueckfrage.fragen(daten_echt, konfig, cache, zustand, top)

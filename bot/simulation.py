@@ -97,6 +97,16 @@ def _apr_frist(pos, apr, st, jetzt):
     return None
 
 
+def _anstieg(f, konfig):
+    """6-h-Kursveraenderung des Nicht-Stablecoins im Paar in % (aus f['momentum']), sonst None."""
+    m = f.get("momentum") or {}
+    dollar = {a.lower() for a in konfig["chains"].get(f["chain"], {}).get("dollar", {})}
+    for t, sym in zip((f["t0"], f["t1"]), f["paar"].split("/")):
+        if t.lower() not in dollar and sym in m:
+            return (m[sym] or {}).get("6h")
+    return None
+
+
 def laufen(daten, konfig, zustand, profil=None, top=None):
     """Ein Simulationsschritt. Aendert zustand, gibt Ereignistexte fuer Telegram zurueck.
     profil: anderer Satz Einstellungen (z. B. Echt-Strategie mit Warteregel und Paarfilter)."""
@@ -167,7 +177,24 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
             if pos["trend_schwach"] >= 2:
                 grund = "Coin im Paar im Abwärtstrend (2 Läufe)"
         if not grund and st:
-            grund = _apr_frist(pos, pos["apr_jetzt"] or 0, st, jetzt)
+            hist = (pos.get("apr_hist") or [])[-2:] + [pos["apr_jetzt"] or 0]
+            pos["apr_hist"] = hist
+            apr_entscheid = sum(hist) / len(hist)  # Mittel der letzten 3 Laeufe gegen Messspruenge
+            grund = _apr_frist(pos, apr_entscheid, st, jetzt)
+            if not grund:
+                pos.pop("halten_anstieg", None)
+            # Stefan 22.11.: steigt der Coin rasch, bleiben, bis der Anstieg vorbei ist (nur solange im Bereich)
+            mom = _anstieg(f, konfig)
+            if grund and st.get("anstieg_6h_prozent") and im_bereich and mom is not None:
+                halten = mom >= (st["anstieg_ende_6h_prozent"] if pos.get("halten_anstieg") else st["anstieg_6h_prozent"])
+                if halten:
+                    if not pos.get("halten_anstieg"):
+                        ereignisse.append(f"📈 Bot-Wallet bleibt in {f['paar']}: APR nur {round(apr_entscheid)} %, "
+                                          f"aber der Coin steigt (+{mom:.1f} % in 6 h). Raus, wenn der Anstieg vorbei ist.")
+                    pos["halten_anstieg"] = True
+                    grund = None
+                elif pos.get("halten_anstieg"):
+                    grund = f"Anstieg vorbei (+{mom:.1f} % in 6 h), {grund}"
         if not grund and st:
             fg = {k: v for k, v in zustand.get("freigaben", {}).items() if v["bis"] > jetzt and k != pos["pool"]}
             if fg:
@@ -235,6 +262,10 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
                 continue
             if (f.get("apr") or 0) < st["einstieg_apr"]:
                 continue
+            if (f.get("apr_laeufe") or 99) < 3:
+                continue  # zu wenig Messwerte (unter 1 h) fuer einen verlaesslichen APR
+            if f.get("apr_min_2h") is not None and f["apr_min_2h"] < st["sofort_raus_unter"]:
+                continue  # Messwert sprang in den letzten 2 h unter 500 %: kein verlaesslicher APR
             if st.get("auto_bis_apr") and (f.get("apr") or 0) > st["auto_bis_apr"]:
                 continue  # Stefan 20.11.: darueber nur nach Rueckfrage per Telegram
             ok, art = paarfilter.erlaubt(f, dollar.get(f["chain"], set()), top or {}, st["max_kursabweichung_prozent"])
