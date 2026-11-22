@@ -356,9 +356,18 @@ def tauschen(w, router, rein, raus, ts, pool, menge, toleranz, mit_eth=False):
     p = (sq / Q96) ** 2  # token1 je token0 (Rohwerte)
     t0 = als_adr(w.chain.call(pool, aufruf(SEL["token0"])))
     erwartet = menge * p if rein == t0 else menge / p
-    mind = int(erwartet * (1 - toleranz / 100))
     if not mit_eth:
         w.freigeben(rein, router, menge)
+    # Angebot per Simulation (gleicher Aufruf, Mindestmenge 0) - deckt Gebuehr und Kursauswirkung ab
+    probe = "0x" + SEL["exactInputSingle"] + _w(rein, raus, ts, w.adr, int(time.time()) + 600, menge, 0, 0)
+    try:
+        angebot = als_int(w.chain.anfrage("eth_call", [{"from": w.adr, "to": router, "data": probe,
+                                                         "value": hex(menge if mit_eth else 0)}, "latest"]))
+    except Exception as ex:
+        raise RuntimeError(f"Tausch-Simulation fehlgeschlagen: {str(ex)[:120]}")
+    if erwartet and angebot < erwartet * 0.9:
+        raise RuntimeError(f"Tausch zu teuer: {angebot} statt ~{int(erwartet)} (Pool zu duenn?)")
+    mind = int(angebot * (1 - toleranz / 100))
     vorher = w.bestand(raus)
     daten = "0x" + SEL["exactInputSingle"] + _w(rein, raus, ts, w.adr, int(time.time()) + 600, menge, mind, 0)
     w.senden(router, daten, wert=menge if mit_eth else 0, was=f"Tausch {rein[:8]}->{raus[:8]}")

@@ -43,5 +43,10 @@ jobs:
           git add docs/data bot/cache.json 2>/dev/null || true
           if git diff --cached --quiet; then echo "Keine Aenderung"; exit 0; fi
           git commit -m "Farm-Daten aktualisiert"
-          git pull --rebase
-          git push
+          # Bei Konflikt gewinnt der Stand DIESES Laufs (Wallet-Zustand darf nie verloren gehen)
+          for i in 1 2 3; do
+            git pull --rebase -X theirs && git push && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep 5
+          done
+          exit 1
