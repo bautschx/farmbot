@@ -773,7 +773,7 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         dex = (farmen.get((ziel, sp["pool"])) or {}).get("dex", "")
         rein_txt = f"<b>{sp['paar']}</b> ({ziel} · {dex}) mit {_apr_txt(sp.get('apr_start'))} APR" + \
             (f", Belohnung {fz.get('belohnung')}, Kampagne bis {fz.get('merkl', {}).get('ende')}" if fz.get("art") == "tresor"
-             else f" bei ±{sp.get('bereich_prozent')} %")
+             else f" bei ±{sp.get('bereich_prozent') or sp.get('bereich')} %")
         if ri:
             meldungen.append(f"🔄 Bot-Wallet gewechselt: {ri['paar']} ({ri.get('chain')}) → {rein_txt}\nGrund: {ri.get('grund')}")
         else:
