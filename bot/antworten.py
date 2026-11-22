@@ -37,6 +37,10 @@ def _gh(methode, pfad, daten=None):
 
 def main():
     chat = str(os.environ.get("TELEGRAM_CHAT_ID", "")).strip()
+    wh = _tg("getWebhookInfo", {}) or {}
+    res = wh.get("result") or {}
+    print("Webhook gesetzt:", bool(res.get("url")), "| wartende Updates:", res.get("pending_update_count"),
+          "| erlaubt:", res.get("allowed_updates"), "| letzter Fehler:", res.get("last_error_message"))
     r = _tg("getUpdates", {"timeout": 0, "allowed_updates": ["callback_query"]})
     if not r or not r.get("ok"):
         return
