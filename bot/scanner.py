@@ -9,6 +9,7 @@ Das ist gemessen, keine Schaufenster-Zahl, und funktioniert ohne Archiv-Knoten.
 Fuer eine eigene Position (z. B. 100 $ bei ±2 %) ergibt sich daraus, was sie im
 Bereich wirklich bekommt. Danach werden Stefans Regeln angewendet.
 """
+import netto
 import math
 import time
 
@@ -580,7 +581,7 @@ def scannen(konfig, cache, verlauf):
                        for b in konfig["bereiche_prozent"]}
                 gebuehr = (f["fee"] or 0) / 10000
                 # Schwankung des Paares (Kurs Token0 in Token1) ueber die letzten 24 h, eigener Verlauf
-                schwankung = None
+                schwankung, vola = None, None
                 if f["t0"] in preis and f["t1"] in preis and preis[f["t1"]] > 0:
                     pk = f"{name}:paar:{f['pool']}"
                     reihe = verlauf.setdefault(pk, [])
@@ -589,6 +590,7 @@ def scannen(konfig, cache, verlauf):
                     tag = [x[1] for x in reihe if x[0] >= jetzt - 24 * 3600]
                     if reihe[0][0] <= jetzt - 23 * 3600 and min(tag) > 0:
                         schwankung = (max(tag) / min(tag) - 1) * 100
+                    vola = netto.vola_tag(reihe, jetzt)  # fuer die Netto-APR (Kursrisiko)
                 # Momentum der Coins im Paar (ohne Dollar-Token): Kursaenderung in $ ueber 6 h, 24 h, 7 Tage.
                 # Abwaertstrend ist der schlimmste Fall fuer eine Position mit Bereich: am Ende haelt man
                 # nur noch den fallenden Coin. Unbekannt (noch keine 24 h Verlauf) zaehlt als nicht bestanden.
@@ -634,6 +636,7 @@ def scannen(konfig, cache, verlauf):
                     "gebuehr_prozent": gebuehr, "tvl_usd": round(tvl),
                     "paar_schwankung_24h_prozent": None if schwankung is None else round(schwankung, 1),
                     "momentum": momentum,
+                    "vola_tag_prozent": vola,
                     "ausschuettung_tag_usd": round(f["rate"] * f["staked_L"] * 86400
                                                    / 10 ** tokens[rt]["d"] * preis.get(rt, 0), 2),
                     "messpunkte": messpunkte,

@@ -108,6 +108,8 @@ def fragen(daten, konfig, cache, echt_zustand, top):
         apr = f.get("apr") or 0
         if (f.get("apr_laeufe") or 99) < 3 or (f.get("apr_min_2h") or 9999) < 500:
             continue  # unsicherer Messwert, nicht fragen
+        if st.get("netto_min_prozent") and (f.get("netto_apr") is None or f["netto_apr"] < st["netto_min_prozent"]):
+            continue  # nach Abzug des Kursrisikos nicht mehr attraktiv
         ok, art = paarfilter.erlaubt(f, dollar.get(f["chain"], set()), top or {}, st["max_kursabweichung_prozent"])
         if apr >= rk["ausnahme_apr"]:
             grund = "außergewöhnlich hoch" + ("" if ok else f" (Paar außerhalb deiner Regel: {art})") + \
@@ -122,7 +124,8 @@ def fragen(daten, konfig, cache, echt_zustand, top):
         bereich = "" if f.get("art") == "tresor" else f" bei ±{f['bereich_prozent']} %"
         tresor = (f"\nBeefy-Tresor, Belohnung {f.get('belohnung')}, Kampagne bis {f['merkl']['ende']}"
                   if f.get("art") == "tresor" else "")
-        text = (f"❓ <b>Soll ich einsteigen?</b>\n<b>{f['paar']}</b> ({f['chain']} · {f['dex']}): {apr_txt} % APR{bereich}"
+        netto_txt = f" (nach Kursrisiko ca. {round(f['netto_apr']):,} %)".replace(",", ".") if f.get("netto_apr") is not None else ""
+        text = (f"❓ <b>Soll ich einsteigen?</b>\n<b>{f['paar']}</b> ({f['chain']} · {f['dex']}): {apr_txt} % APR{netto_txt}{bereich}"
                 f"\n{grund}\n" + (links.fuer_farm(f) or "") + tresor +
                 f"\n\nDeine Antwort holt der Bot beim nächsten Lauf ab (ca. {_naechster_lauf()} Uhr). "
                 "Dann verschwinden die Knöpfe und du bekommst eine Bestätigung.")

@@ -825,6 +825,7 @@ def schritt(konfig, daten, soll, cache, zustand, schluessel):
         ri = zustand.pop("raus_info", None)
         dex = (farmen.get((ziel, sp["pool"])) or {}).get("dex", "")
         rein_txt = f"<b>{sp['paar']}</b> ({ziel} · {dex}) mit {_apr_txt(sp.get('apr_start'))} APR" + \
+            (f" (nach Kursrisiko ca. {_apr_txt(sp['netto_start'])})" if sp.get("netto_start") is not None else "") + \
             (f", Belohnung {fz.get('belohnung')}, Kampagne bis {fz.get('merkl', {}).get('ende')}" if fz.get("art") == "tresor"
              else f" bei ±{sp.get('bereich_prozent') or sp.get('bereich')} %")
         if ri:

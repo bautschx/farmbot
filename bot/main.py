@@ -277,6 +277,8 @@ def scan(konfig):
             print("Merkl-Tresore fehlgeschlagen:", ex)
         import glaettung
         daten_echt = glaettung.anwenden(daten_echt, zustand, profil["strategie"]["chains"])
+        import netto
+        daten_echt = netto.anwenden(daten_echt)
         ereignisse = simulation.laufen(daten_echt, konfig, zustand, profil=profil, top=top)
         if profil.get("live"):
             for x in ereignisse:

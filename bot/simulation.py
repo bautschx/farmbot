@@ -176,6 +176,15 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
             pos["trend_schwach"] = pos.get("trend_schwach", 0) + 1 if fallend else 0
             if pos["trend_schwach"] >= 2:
                 grund = "Coin im Paar im Abwärtstrend (2 Läufe)"
+        # Verlustbremse (22.11.2026): faellt die Position samt Belohnung zu weit unter den Einsatz, sofort raus,
+        # egal wie hoch die APR ist. Danach diesen Pool eine Weile nicht wieder nehmen.
+        bremse = False
+        if not grund and st and st.get("verlustbremse_prozent"):
+            netto_wert = pos["wert_usd"] + pos["belohnung_usd"] * (1 - e["verkauf_belohnung_prozent"] / 100)
+            minus = (netto_wert / pos["einsatz_usd"] - 1) * 100 if pos["einsatz_usd"] else 0
+            if minus <= -st["verlustbremse_prozent"]:
+                grund = f"Verlustbremse: {minus:.1f} % seit Einstieg (Kurs gefallen, Belohnung eingerechnet)"
+                bremse = True
         if not grund and st:
             hist = (pos.get("apr_hist") or [])[-2:] + [pos["apr_jetzt"] or 0]
             pos["apr_hist"] = hist
@@ -208,6 +217,8 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
                 grund = f"APR unter {grenze} % (2 Läufe)"
         if grund:
             _schliessen(pos, f, jetzt, grund, offen, buch, sperre, e)
+            if bremse:
+                sperre[f"{pos['chain']}|{pos['pool']}"] = jetzt + st.get("verlustbremse_sperre_stunden", 6) * 3600
             t = buch[-1]
             ereignisse.append(f"🧪 Raus: {pos['paar']} ({pos['dex']}) – {grund}. Ergebnis "
                               f"{t['ergebnis_usd']:+.2f} $ nach {t['tage']:.1f} Tagen")
@@ -266,6 +277,8 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
                 continue  # zu wenig Messwerte (unter 1 h) fuer einen verlaesslichen APR
             if f.get("apr_min_2h") is not None and f["apr_min_2h"] < st["sofort_raus_unter"]:
                 continue  # Messwert sprang in den letzten 2 h unter 500 %: kein verlaesslicher APR
+            if st.get("netto_min_prozent") and (f.get("netto_apr") is None or f["netto_apr"] < st["netto_min_prozent"]):
+                continue  # nach Abzug des erwarteten Kursverlusts zu wenig (oder Schwankung noch unbekannt)
             if st.get("auto_bis_apr") and (f.get("apr") or 0) > st["auto_bis_apr"]:
                 continue  # Stefan 20.11.: darueber nur nach Rueckfrage per Telegram
             ok, art = paarfilter.erlaubt(f, dollar.get(f["chain"], set()), top or {}, st["max_kursabweichung_prozent"])
@@ -273,7 +286,9 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
                 f = {**f, "paarart": art}
                 geeignet.append(f)
         kandidaten = geeignet
-    kandidaten.sort(key=lambda f: (not f.get("freigabe"), -(f.get("apr") or 0)))
+    # beste zuerst: nach Netto-APR (APR minus Kursrisiko), wo bekannt
+    kandidaten.sort(key=lambda f: (not f.get("freigabe"),
+                                   -(f["netto_apr"] if st and f.get("netto_apr") is not None else (f.get("apr") or 0))))
     for f in kandidaten[:max(0, e["positionen"] - len(offen))]:
         sim = f["sim"]
         breite = f["bereich_prozent"]
@@ -295,7 +310,7 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
             "belohnung_menge": 0.0, "belohnung_usd": 0.0, "kosten_usd": kosten, "nachgezogen": 0,
             "zeit_im_bereich_s": 0, "laufzeit_s": 0, "paarart": f.get("paarart"), "art": f.get("art"),
             "einstieg_ref": min(st["einstieg_apr"], f.get("apr") or 0) if (st and f.get("freigabe")) else None, "fehlt": 0, "apr_schwach": 0, "trend_schwach": 0, "liq_schwach": 0,
-            "apr_start": f.get("apr"), "apr_jetzt": f.get("apr"),
+            "apr_start": f.get("apr"), "apr_jetzt": f.get("apr"), "netto_start": f.get("netto_apr"),
             "merkmale": {"bereich_prozent": breite, "bereich_mindest_prozent": f.get("bereich_mindest_prozent"),
                          "gebuehr_prozent": f["gebuehr_prozent"], "tvl_usd": f["tvl_usd"],
                          "paar_schwankung_24h_prozent": f.get("paar_schwankung_24h_prozent"),
@@ -303,7 +318,8 @@ def laufen(daten, konfig, zustand, profil=None, top=None):
                          "messpunkte": f.get("messpunkte"),
                          # Kursaenderung der Coins im Paar beim Einstieg (6 h / 24 h / 7 Tage),
                          # um spaeter zu sehen, ob Farmen mit Aufwaertstrend besser laufen
-                         "momentum": f.get("momentum")},
+                         "momentum": f.get("momentum"),
+                         "vola_tag_prozent": f.get("vola_tag_prozent"), "vola_kosten_apr": f.get("vola_kosten_apr")},
             "letzte": {k: sim[k] for k in ("p0", "p1", "d0", "d1")},
             "letzter_belohnungspreis": f["belohnung_preis"],
         }

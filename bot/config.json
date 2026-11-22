@@ -760,7 +760,10 @@
       "max_kursabweichung_prozent": 5,
       "auto_bis_apr": 3000,
       "anstieg_6h_prozent": 3,
-      "anstieg_ende_6h_prozent": 1
+      "anstieg_ende_6h_prozent": 1,
+      "netto_min_prozent": 700,
+      "verlustbremse_prozent": 3,
+      "verlustbremse_sperre_stunden": 6
     },
     "bot_adresse": "0x228561ca396631b51b63369c882fd6c7f7f2e9fd",
     "max_einsatz_usd": 100,

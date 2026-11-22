@@ -135,6 +135,7 @@ def erzeugen(daten, konfig, cache, top):
             "belohnung": "/".join(x or "?" for x in k["belohnung_sym"]), "belohnung_preis": 1.0,
             "sim": sim, "pruefung": pruefung, "alle_regeln_ok": all(pruefung.values()),
             "momentum": basis.get("momentum"), "paar_schwankung_24h_prozent": basis.get("paar_schwankung_24h_prozent"),
+            "vola_tag_prozent": basis.get("vola_tag_prozent"),
             "merkl": {"name": k["name"], "usd_tag": round(k["usd_tag"], 2), "tvl_merkl": round(k["tvl"]),
                       "tvl_eigen": round(tvl_eigen) if tvl_eigen else None,
                       "ende": time.strftime("%d.%m.%Y %H:%M UTC", time.gmtime(k["ende"]))},
